@@ -57,10 +57,6 @@ class AutomationEngine(
         screenshot.recycle()
 
         Log.i(TAG, "Screenshot captured: ${w}×${h}")
-        withContext(Dispatchers.Main) {
-            Toast.makeText(context, "Screenshot: ${w}×${h}", Toast.LENGTH_SHORT).show()
-        }
-
         Log.d(TAG, "Sleeping ${scanIntervalMs / 1000}s before next capture")
         delay(scanIntervalMs)
     }
