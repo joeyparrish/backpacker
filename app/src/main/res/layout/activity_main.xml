@@ -121,7 +121,7 @@
             android:id="@+id/btnToggle"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:text="@string/start_automation"
+            android:text="@string/enable_overlay"
             android:textSize="16sp"
             app:cornerRadius="8dp" />
 
