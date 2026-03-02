@@ -84,13 +84,13 @@ class OverlayView(
 
     private fun updateAppearance() {
         if (isRunning) {
-            // RUNNING: cyan background, black icon, fully opaque — clearly "active"
+            // RUNNING: black background, red icon, fully opaque — clearly "active"
             binding.fabToggle.alpha = 1.0f
-            binding.fabToggle.backgroundTintList = ColorStateList.valueOf(COLOR_CYAN)
-            binding.fabToggle.imageTintList = ColorStateList.valueOf(Color.BLACK)
+            binding.fabToggle.backgroundTintList = ColorStateList.valueOf(Color.BLACK)
+            binding.fabToggle.imageTintList = ColorStateList.valueOf(Color.RED)
         } else {
             // IDLE: black background, cyan icon, slightly dimmed — visually "inactive"
-            binding.fabToggle.alpha = 0.70f
+            binding.fabToggle.alpha = 0.50f
             binding.fabToggle.backgroundTintList = ColorStateList.valueOf(Color.BLACK)
             binding.fabToggle.imageTintList = null  // original icon colors (cyan from drawable)
         }
