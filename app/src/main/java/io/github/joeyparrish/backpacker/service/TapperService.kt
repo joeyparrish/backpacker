@@ -31,7 +31,7 @@ class TapperService : AccessibilityService() {
         // The overlay is shown explicitly via showOverlay() once screen-capture permission
         // has been granted by the user in MainActivity.
         try {
-            overlayView = OverlayView(this) { isRunning -> handleToggle(isRunning) }
+            overlayView = OverlayView(this) { state -> handleToggle(state) }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create overlay: $e")
         }
@@ -100,15 +100,16 @@ class TapperService : AccessibilityService() {
 
     /**
      * Called by [OverlayView] when the user taps the FAB.
-     * [startCapture] reflects the new FAB state (true = user wants to run, false = pause).
-     * Since MediaProjection is already held when the overlay is shown, we can go directly
-     * to run/pause without needing to re-launch MainActivity for consent.
+     * [newState] is the state the FAB just cycled into.
+     * IDLE  → pause the capture loop
+     * HOUSE → run at low frequency (sitting still)
+     * CAR   → run at high frequency (driving)
      */
-    private fun handleToggle(startCapture: Boolean) {
-        if (startCapture) {
-            AutomationService.run(this)
-        } else {
-            AutomationService.pause(this)
+    private fun handleToggle(newState: OverlayView.State) {
+        when (newState) {
+            OverlayView.State.IDLE  -> AutomationService.pause(this)
+            OverlayView.State.HOUSE -> AutomationService.run(this, AutomationService.ScanMode.HOUSE)
+            OverlayView.State.CAR   -> AutomationService.run(this, AutomationService.ScanMode.CAR)
         }
     }
 

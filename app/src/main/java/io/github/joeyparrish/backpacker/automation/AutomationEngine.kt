@@ -20,11 +20,10 @@ import kotlin.coroutines.coroutineContext
 class AutomationEngine(
     private val screenshotService: ScreenshotService,
     private val tapperService: TapperService,
-    private val context: Context
+    private val context: Context,
+    private val scanIntervalMs: Long = 60_000L
 ) {
     @Volatile private var running = true
-
-    private val IDLE_SLEEP_MS = 60_000L
 
     suspend fun run() {
         Log.i(TAG, "AutomationEngine starting")
@@ -62,8 +61,8 @@ class AutomationEngine(
             Toast.makeText(context, "Screenshot: ${w}×${h}", Toast.LENGTH_SHORT).show()
         }
 
-        Log.d(TAG, "Sleeping ${IDLE_SLEEP_MS / 1000}s before next capture")
-        delay(IDLE_SLEEP_MS)
+        Log.d(TAG, "Sleeping ${scanIntervalMs / 1000}s before next capture")
+        delay(scanIntervalMs)
     }
 
     companion object {

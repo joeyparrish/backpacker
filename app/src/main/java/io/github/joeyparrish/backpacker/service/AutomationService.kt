@@ -82,7 +82,9 @@ class AutomationService : Service() {
 
             ACTION_RUN -> {
                 if (screenshotService != null) {
-                    startLoop()
+                    val modeName = intent.getStringExtra(EXTRA_MODE) ?: ScanMode.HOUSE.name
+                    stopLoop()   // replace any existing loop (mode may have changed)
+                    startLoop(ScanMode.valueOf(modeName))
                 } else {
                     Log.e(TAG, "ACTION_RUN ignored — not in READY state")
                 }
@@ -146,16 +148,22 @@ class AutomationService : Service() {
     /**
      * READY → RUNNING.
      * Creates a fresh [CoroutineScope] and [AutomationEngine] and starts the capture loop.
+     * [mode] controls how frequently the loop captures; defaults to [ScanMode.HOUSE].
      */
-    private fun startLoop() {
+    private fun startLoop(mode: ScanMode = ScanMode.HOUSE) {
         val tapper = TapperService.instance
         if (tapper == null) {
             Log.e(TAG, "startLoop: TapperService not connected")
             return
         }
 
+        val intervalMs = when (mode) {
+            ScanMode.HOUSE -> 60_000L   // sitting still — scan once per minute
+            ScanMode.CAR   ->  1_000L   // driving — scan once per second
+        }
+
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        automationEngine = AutomationEngine(screenshotService!!, tapper, this)
+        automationEngine = AutomationEngine(screenshotService!!, tapper, this, intervalMs)
 
         scope!!.launch { automationEngine!!.run() }
 
@@ -260,6 +268,9 @@ class AutomationService : Service() {
         const val ACTION_STOP    = "io.github.joeyparrish.backpacker.ACTION_STOP"
         const val EXTRA_RESULT_CODE = "extra_result_code"
         const val EXTRA_RESULT_DATA = "extra_result_data"
+        const val EXTRA_MODE        = "extra_mode"
+
+        enum class ScanMode { HOUSE, CAR }
 
         /** True while the capture loop coroutine is running. */
         @Volatile var isRunning = false
@@ -287,10 +298,13 @@ class AutomationService : Service() {
             )
         }
 
-        /** Start (or resume) the capture loop.  No-op if not in READY state. */
-        fun run(context: Context) {
+        /** Start (or switch) the capture loop.  No-op if not in READY state. */
+        fun run(context: Context, mode: ScanMode) {
             context.startService(
-                Intent(context, AutomationService::class.java).apply { action = ACTION_RUN }
+                Intent(context, AutomationService::class.java).apply {
+                    action = ACTION_RUN
+                    putExtra(EXTRA_MODE, mode.name)
+                }
             )
         }
 

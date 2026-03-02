@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    FAB icon: simple house silhouette, 24×24 dp viewport.
+
+    Geometry:
+      • Roof   — triangle,   peak (12,1), base y=12, spans x=1–23
+      • Body   — rectangle,  x=3.5–20.5,  y=12–23
+
+    Fill is white so OverlayView.updateAppearance() can tint it to any
+    colour via imageTintList without fighting the drawable's own hue.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Roof triangle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 12,1 L 23,12 L 1,12 Z" />
+
+    <!-- Body rectangle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 3.5,12 L 3.5,23 L 20.5,23 L 20.5,12 Z" />
+
+</vector>
