@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Floating-action-button icon: Pokéstop silhouette scaled to 24 dp.
+
+    Geometry matches ic_launcher_foreground.xml (108-dp viewport) scaled by
+    24/108 ≈ 0.222 and translated so the content fills the 24×24 viewport:
+
+      • Outer ring (annulus)  centre (12,10)  outer r=8   inner r=6
+      • Inner disc            centre (12,10)  r=5.5  (0.5 dp gap to ring)
+      • Pole                  1 dp wide, y 15.5–20.5
+      • Base platform         9 dp wide, y 20.5–22
+
+    All paths are cyan (#17C8FF) — the FAB sets backgroundTint black so the
+    result mirrors the launcher icon: cyan Pokéstop on black.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Outer ring: annulus via even-odd fill (outer r=8, inner r=6, centre 12,10) -->
+    <path
+        android:fillType="evenOdd"
+        android:fillColor="#17C8FF"
+        android:pathData="
+            M 20,10 A 8,8 0 0 1 12,18 A 8,8 0 0 1 4,10
+                    A 8,8 0 0 1 12,2  A 8,8 0 0 1 20,10 Z
+            M 18,10 A 6,6 0 0 1 12,16 A 6,6 0 0 1 6,10
+                    A 6,6 0 0 1 12,4  A 6,6 0 0 1 18,10 Z" />
+
+    <!-- Inner disc: r=5.5, centre (12,10) -->
+    <path
+        android:fillColor="#17C8FF"
+        android:pathData="
+            M 17.5,10 A 5.5,5.5 0 0 1 12,15.5 A 5.5,5.5 0 0 1 6.5,10
+                      A 5.5,5.5 0 0 1 12,4.5  A 5.5,5.5 0 0 1 17.5,10 Z" />
+
+    <!-- Pole: 1 dp wide, connects disc bottom to base -->
+    <path
+        android:fillColor="#17C8FF"
+        android:pathData="M 11.5,15.5 L 12.5,15.5 L 12.5,20.5 L 11.5,20.5 Z" />
+
+    <!-- Base platform: 9 dp wide, 1.5 dp tall -->
+    <path
+        android:fillColor="#17C8FF"
+        android:pathData="M 7.5,20.5 L 16.5,20.5 L 16.5,22 L 7.5,22 Z" />
+
+</vector>
