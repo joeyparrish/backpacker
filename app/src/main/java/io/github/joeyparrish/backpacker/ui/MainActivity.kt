@@ -105,8 +105,17 @@ class MainActivity : AppCompatActivity() {
         // before the consent dialog is shown.
         AutomationService.prepare(this)
         // Step 2: show the system screen-capture consent dialog.
+        // On Android 14+ (API 34) we pass createConfigForDefaultDisplay() to skip the
+        // app-vs-full-screen picker and go straight to the simple "Allow recording?" prompt.
         val mpManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        mpLauncher.launch(mpManager.createScreenCaptureIntent())
+        val captureIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            mpManager.createScreenCaptureIntent(
+                android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay()
+            )
+        } else {
+            mpManager.createScreenCaptureIntent()
+        }
+        mpLauncher.launch(captureIntent)
     }
 
     private fun disableOverlay() {
