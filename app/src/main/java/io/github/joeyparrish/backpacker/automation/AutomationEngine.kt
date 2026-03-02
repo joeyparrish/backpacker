@@ -1,42 +1,30 @@
 package io.github.joeyparrish.backpacker.automation
 
+import android.content.Context
 import android.util.Log
+import android.widget.Toast
 import io.github.joeyparrish.backpacker.service.ScreenshotService
 import io.github.joeyparrish.backpacker.service.TapperService
-import io.github.joeyparrish.backpacker.util.CoordinateTransform
-import io.github.joeyparrish.backpacker.vision.PokestopDetector
-import io.github.joeyparrish.backpacker.vision.SpinnerDetector
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 
 /**
  * Coroutine-based state machine that orchestrates the full Pokéstop automation loop.
  * Run this inside a coroutine scope (see AutomationService); cancel the scope to stop.
+ *
+ * [context] is used for debug toasts only; pass the service's application context.
  */
 class AutomationEngine(
     private val screenshotService: ScreenshotService,
-    private val tapperService: TapperService
+    private val tapperService: TapperService,
+    private val context: Context
 ) {
-    private val pokestopDetector = PokestopDetector()
-    private val spinnerDetector = SpinnerDetector()
-
     @Volatile private var running = true
 
-    // Timing constants (ms) — tune per device
     private val IDLE_SLEEP_MS = 60_000L
-    private val TAP_TO_DETAIL_MS = 1_000L
-    private val RANGE_CHECK_MS = 500L
-    private val SPIN_RESULT_MS = 1_500L
-    private val SPIN_RETRY_MS = 2_000L
-    private val BACK_TO_MAP_MS = 700L
-    private val MAX_SPIN_ATTEMPTS = 3
-
-    // Swipe parameters (720p normalised pixels) — tune from real screenshots
-    private val SPIN_Y_NORM = 480f
-    private val SPIN_X_START_NORM = 180f
-    private val SPIN_X_END_NORM = 540f
-    private val SPIN_DURATION_MS = 300L
 
     suspend fun run() {
         Log.i(TAG, "AutomationEngine starting")
@@ -44,8 +32,6 @@ class AutomationEngine(
             try {
                 scanLoop()
             } catch (e: Throwable) {
-                // Catch Throwable (not just Exception) so that Errors such as
-                // OutOfMemoryError don't escape the coroutine and crash the process.
                 Log.e(TAG, "Error in scan loop: $e")
                 delay(5_000)
             }
@@ -67,8 +53,14 @@ class AutomationEngine(
             return
         }
 
-        Log.i(TAG, "Screenshot captured: ${screenshot.width}×${screenshot.height}")
+        val w = screenshot.width
+        val h = screenshot.height
         screenshot.recycle()
+
+        Log.i(TAG, "Screenshot captured: ${w}×${h}")
+        withContext(Dispatchers.Main) {
+            Toast.makeText(context, "Screenshot: ${w}×${h}", Toast.LENGTH_SHORT).show()
+        }
 
         Log.d(TAG, "Sleeping ${IDLE_SLEEP_MS / 1000}s before next capture")
         delay(IDLE_SLEEP_MS)

@@ -26,13 +26,15 @@ import io.github.joeyparrish.backpacker.service.TapperService
 /**
  * Onboarding + control activity.
  *
- * Walks the user through three required permissions before offering the Start button:
- *   1. Accessibility service enabled (TapperService)
- *   2. POST_NOTIFICATIONS permission (Android 13+)
- *   3. Battery optimization disabled
+ * Walks the user through required permissions, then offers an "Enable Overlay" button that:
+ *   1. Prepares the AutomationService foreground service (Android 14 timing requirement).
+ *   2. Shows the MediaProjection consent dialog.
+ *   3. On grant: stores the token (READY state) and shows the floating FAB overlay.
  *
- * The Start button triggers the MediaProjection consent dialog; on approval the
- * AutomationService is started with the resulting token.
+ * Once the overlay is active the user interacts with the FAB directly.  The FAB toggles
+ * the capture loop (RUNNING ↔ READY) without needing to return to this activity.
+ *
+ * "Disable Overlay" hides the FAB and releases the MediaProjection token.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -42,11 +44,12 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            AutomationService.start(this, result.resultCode, result.data!!)
-            updateToggleButton()
+            // Permission granted: enter READY state then show the overlay.
+            AutomationService.ready(this, result.resultCode, result.data!!)
+            TapperService.instance?.showOverlay()
+            updateOverlayButton()
         } else {
-            // User denied the consent dialog; stop the prepared foreground service so it
-            // doesn't linger with its "Requesting permission…" notification.
+            // User denied — clean up the prepared foreground service.
             AutomationService.stop(this)
             Toast.makeText(this, "Screen capture permission denied", Toast.LENGTH_SHORT).show()
         }
@@ -73,9 +76,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnOpenAccessibility.setOnClickListener { openAccessibilitySettings() }
         binding.btnRequestNotification.setOnClickListener { requestNotificationPermission() }
         binding.btnBattery.setOnClickListener { openBatteryOptimizationSettings() }
-        binding.btnToggle.setOnClickListener { handleToggleTap() }
-
-        handleStartFromOverlay(intent)
+        binding.btnToggle.setOnClickListener { handleOverlayToggle() }
     }
 
     override fun onResume() {
@@ -83,39 +84,72 @@ class MainActivity : AppCompatActivity() {
         updateStatus()
     }
 
-    override fun onNewIntent(intent: Intent?) {
-        super.onNewIntent(intent)
-        handleStartFromOverlay(intent)
-    }
+    // -------------------------------------------------------------------------
+    // Overlay enable / disable
+    // -------------------------------------------------------------------------
 
-    private fun handleStartFromOverlay(intent: Intent?) {
-        if (intent?.getBooleanExtra(TapperService.EXTRA_START_FROM_OVERLAY, false) == true) {
-            if (isAccessibilityEnabled()) startMediaProjectionConsent()
-        }
-    }
-
-    private fun handleToggleTap() {
-        if (AutomationService.isRunning) {
-            AutomationService.stop(this)
-            updateToggleButton()
+    private fun handleOverlayToggle() {
+        if (TapperService.isOverlayShown) {
+            disableOverlay()
         } else {
-            if (!isAccessibilityEnabled()) {
-                Toast.makeText(this, "Enable the Accessibility service first", Toast.LENGTH_LONG).show()
-                return
-            }
-            startMediaProjectionConsent()
+            enableOverlay()
         }
     }
 
-    private fun startMediaProjectionConsent() {
-        // Android 14+: the foreground service with FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION must
-        // be running and have called startForeground() BEFORE the consent dialog is shown.
-        // Prepare the service first so the upcoming createVirtualDisplay() won't throw
-        // SecurityException.
+    private fun enableOverlay() {
+        if (!isAccessibilityEnabled()) {
+            Toast.makeText(this, "Enable the Accessibility service first", Toast.LENGTH_LONG).show()
+            return
+        }
+        // Step 1: start the foreground service so Android 14's timing requirement is satisfied
+        // before the consent dialog is shown.
         AutomationService.prepare(this)
+        // Step 2: show the system screen-capture consent dialog.
         val mpManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         mpLauncher.launch(mpManager.createScreenCaptureIntent())
     }
+
+    private fun disableOverlay() {
+        TapperService.instance?.hideOverlay()
+        AutomationService.stop(this)
+        updateOverlayButton()
+    }
+
+    // -------------------------------------------------------------------------
+    // Status + button state
+    // -------------------------------------------------------------------------
+
+    private fun updateStatus() {
+        val a11yOk = isAccessibilityEnabled()
+        val notifOk = hasNotificationPermission()
+        val batteryOk = isBatteryOptimizationDisabled()
+
+        binding.tvAccessibilityStatus.text = if (a11yOk)
+            getString(R.string.status_accessibility_ok)
+        else
+            getString(R.string.status_accessibility_missing)
+
+        binding.btnOpenAccessibility.isEnabled = !a11yOk
+        binding.btnRequestNotification.isEnabled = !notifOk
+        binding.btnBattery.isEnabled = !batteryOk
+        binding.btnToggle.isEnabled = a11yOk
+        updateOverlayButton()
+
+        Log.d(TAG, "Status — a11y=$a11yOk notif=$notifOk battery=$batteryOk " +
+                "overlayShown=${TapperService.isOverlayShown} " +
+                "ready=${AutomationService.isReady} running=${AutomationService.isRunning}")
+    }
+
+    private fun updateOverlayButton() {
+        binding.btnToggle.text = if (TapperService.isOverlayShown)
+            getString(R.string.disable_overlay)
+        else
+            getString(R.string.enable_overlay)
+    }
+
+    // -------------------------------------------------------------------------
+    // Permission helpers
+    // -------------------------------------------------------------------------
 
     private fun isAccessibilityEnabled(): Boolean {
         val expectedComponent = ComponentName(this, TapperService::class.java)
@@ -166,32 +200,6 @@ class MainActivity : AppCompatActivity() {
     private fun isBatteryOptimizationDisabled(): Boolean {
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         return pm.isIgnoringBatteryOptimizations(packageName)
-    }
-
-    private fun updateStatus() {
-        val a11yOk = isAccessibilityEnabled()
-        val notifOk = hasNotificationPermission()
-        val batteryOk = isBatteryOptimizationDisabled()
-
-        binding.tvAccessibilityStatus.text = if (a11yOk)
-            getString(R.string.status_accessibility_ok)
-        else
-            getString(R.string.status_accessibility_missing)
-
-        binding.btnOpenAccessibility.isEnabled = !a11yOk
-        binding.btnRequestNotification.isEnabled = !notifOk
-        binding.btnBattery.isEnabled = !batteryOk
-        binding.btnToggle.isEnabled = a11yOk
-        updateToggleButton()
-
-        Log.d(TAG, "Status — a11y=$a11yOk  notif=$notifOk  battery=$batteryOk  running=${AutomationService.isRunning}")
-    }
-
-    private fun updateToggleButton() {
-        binding.btnToggle.text = if (AutomationService.isRunning)
-            getString(R.string.stop_automation)
-        else
-            getString(R.string.start_automation)
     }
 
     companion object {

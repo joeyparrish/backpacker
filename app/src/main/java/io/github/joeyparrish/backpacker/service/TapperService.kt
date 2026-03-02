@@ -2,7 +2,6 @@ package io.github.joeyparrish.backpacker.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
-import android.content.Intent
 import android.graphics.Path
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
@@ -11,10 +10,13 @@ import io.github.joeyparrish.backpacker.ui.OverlayView
 /**
  * AccessibilityService that:
  *   1. Injects tap and swipe gestures into any foreground app (including Pokémon GO)
- *   2. Draws the floating ▶/⏹ overlay button over Pokémon GO
+ *   2. Draws the floating overlay button over Pokémon GO (when explicitly enabled)
  *
  * The user must enable this service manually in Android Settings → Accessibility.
  * MainActivity provides a deep-link button to open the Accessibility settings page.
+ *
+ * The overlay is NOT shown automatically on service connect; it is shown and hidden
+ * by MainActivity via [showOverlay] / [hideOverlay] as part of the enable/disable flow.
  */
 class TapperService : AccessibilityService() {
 
@@ -25,9 +27,11 @@ class TapperService : AccessibilityService() {
         instance = this
         Log.i(TAG, "TapperService connected")
 
+        // Create the overlay view so it is ready to show, but do not display it yet.
+        // The overlay is shown explicitly via showOverlay() once screen-capture permission
+        // has been granted by the user in MainActivity.
         try {
             overlayView = OverlayView(this) { isRunning -> handleToggle(isRunning) }
-            overlayView?.show()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create overlay: $e")
         }
@@ -44,9 +48,27 @@ class TapperService : AccessibilityService() {
     override fun onDestroy() {
         try { overlayView?.hide() } catch (e: Exception) { Log.w(TAG, "hide overlay: $e") }
         overlayView = null
+        isOverlayShown = false
         instance = null
         Log.i(TAG, "TapperService destroyed")
         super.onDestroy()
+    }
+
+    // -------------------------------------------------------------------------
+    // Overlay visibility
+    // -------------------------------------------------------------------------
+
+    fun showOverlay() {
+        overlayView?.setState(OverlayView.State.IDLE)
+        overlayView?.show()
+        isOverlayShown = true
+        Log.i(TAG, "Overlay shown")
+    }
+
+    fun hideOverlay() {
+        overlayView?.hide()
+        isOverlayShown = false
+        Log.i(TAG, "Overlay hidden")
     }
 
     // -------------------------------------------------------------------------
@@ -76,27 +98,23 @@ class TapperService : AccessibilityService() {
 
     // -------------------------------------------------------------------------
 
-    private fun handleToggle(startAutomation: Boolean) {
-        if (startAutomation) {
-            overlayView?.setState(OverlayView.State.RUNNING)
-            // MediaProjection consent must come from an Activity, so re-launch MainActivity.
-            val launchIntent = packageManager
-                .getLaunchIntentForPackage(packageName)
-                ?.apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    putExtra(EXTRA_START_FROM_OVERLAY, true)
-                }
-            launchIntent?.let { startActivity(it) }
+    /**
+     * Called by [OverlayView] when the user taps the FAB.
+     * [startCapture] reflects the new FAB state (true = user wants to run, false = pause).
+     * Since MediaProjection is already held when the overlay is shown, we can go directly
+     * to run/pause without needing to re-launch MainActivity for consent.
+     */
+    private fun handleToggle(startCapture: Boolean) {
+        if (startCapture) {
+            AutomationService.run(this)
         } else {
-            overlayView?.setState(OverlayView.State.IDLE)
-            AutomationService.stop(this)
+            AutomationService.pause(this)
         }
     }
 
     /**
-     * Called by AutomationService when it stops (cleanly or via onDestroy) so the
-     * overlay FAB is reset to IDLE.  Without this the button stays full-opacity
-     * after a crash and the user has to toggle the a11y service to recover.
+     * Called by AutomationService when it stops unexpectedly (e.g. MediaProjection revoked)
+     * so the overlay FAB is reset to IDLE rather than staying stuck in RUNNING.
      */
     fun notifyAutomationStopped() {
         overlayView?.setState(OverlayView.State.IDLE)
@@ -104,10 +122,13 @@ class TapperService : AccessibilityService() {
 
     companion object {
         private const val TAG = "TapperService"
-        const val EXTRA_START_FROM_OVERLAY = "start_from_overlay"
 
         @Volatile
         var instance: TapperService? = null
+            private set
+
+        @Volatile
+        var isOverlayShown: Boolean = false
             private set
 
         val isConnected: Boolean get() = instance != null

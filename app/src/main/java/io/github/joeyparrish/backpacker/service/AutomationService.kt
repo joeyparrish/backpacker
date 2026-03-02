@@ -9,13 +9,13 @@ import android.content.pm.ServiceInfo
 import android.media.projection.MediaProjectionManager
 import android.os.IBinder
 import android.util.Log
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import io.github.joeyparrish.backpacker.BackpackerApp
 import io.github.joeyparrish.backpacker.R
 import io.github.joeyparrish.backpacker.automation.AutomationEngine
 import io.github.joeyparrish.backpacker.ui.MainActivity
-import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,73 +27,75 @@ import kotlinx.coroutines.withContext
 /**
  * Foreground service that owns the MediaProjection token and runs the AutomationEngine.
  *
- * Android 14 (API 34) requires that the foreground service with
- * FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION is already running and has called startForeground()
- * BEFORE the MediaProjection consent dialog (createScreenCaptureIntent) is shown.
+ * Three-state lifecycle:
+ *   PREPARING  Service is foreground (satisfying the Android 14 requirement) while the
+ *              system consent dialog is open.  No projection yet.
+ *   READY      Consent was granted; ScreenshotService is initialised and holds the
+ *              VirtualDisplay.  The capture loop is NOT running.
+ *   RUNNING    The coroutine capture loop is active.  Transitions back to READY on pause.
  *
- * Lifecycle:
- *   1. Caller sends ACTION_PREPARE before showing the consent dialog.
- *      The service enters foreground with FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION so the OS
- *      allows the upcoming createVirtualDisplay() call.
- *   2. User accepts the consent dialog; caller sends ACTION_START with resultCode + data.
- *   3. Service creates ScreenshotService and AutomationEngine and starts the coroutine loop.
- *   4. ACTION_STOP (or notification action, or MediaProjection revoked) stops everything.
+ * Action flow:
+ *   1. ACTION_PREPARE  — enter foreground before showing the consent dialog (Android 14).
+ *   2. ACTION_READY    — consent granted; store token, enter READY state.
+ *   3. ACTION_RUN      — user tapped FAB on; start the capture loop.
+ *   4. ACTION_PAUSE    — user tapped FAB off; stop the loop, stay READY.
+ *   5. ACTION_STOP     — disable overlay; release projection and stop foreground.
  */
 class AutomationService : Service() {
 
-    // Recreated on each startAutomation() so that stopping and restarting works correctly.
-    // A cancelled CoroutineScope cannot launch new coroutines, so we must not reuse it.
-    private var scope: CoroutineScope? = null
-
     private var screenshotService: ScreenshotService? = null
+
+    // Scope + engine are recreated on each ACTION_RUN so a cancelled scope is never reused.
+    private var scope: CoroutineScope? = null
     private var automationEngine: AutomationEngine? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
 
             ACTION_PREPARE -> {
-                // Enter foreground with the mediaProjection type BEFORE the consent dialog is
-                // shown.  This satisfies the Android 14 requirement that the service is already
-                // a foreground mediaProjection service when createVirtualDisplay() is later called.
+                // Must enter foreground with FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION before
+                // calling createScreenCaptureIntent(); otherwise createVirtualDisplay() will
+                // throw SecurityException on Android 14+.
                 ServiceCompat.startForeground(
                     this,
                     BackpackerApp.NOTIFICATION_ID,
                     buildPreparingNotification(),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
                 )
-                Log.i(TAG, "AutomationService prepared — awaiting MediaProjection consent")
+                Log.i(TAG, "PREPARING — awaiting consent")
             }
 
-            ACTION_START -> {
-                // NOTE: Activity.RESULT_OK = -1, so -1 is a *valid* result code.
-                // Use Int.MIN_VALUE as the sentinel for "extra not present".
+            ACTION_READY -> {
                 val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Int.MIN_VALUE)
                 @Suppress("DEPRECATION")
                 val resultData: Intent? = intent.getParcelableExtra(EXTRA_RESULT_DATA)
 
-                Toast.makeText(this, "ACTION_START received (rc=$resultCode)", Toast.LENGTH_SHORT).show()
-
                 if (resultCode == Int.MIN_VALUE || resultData == null) {
-                    Log.e(TAG, "Invalid MediaProjection data; stopping service")
+                    Log.e(TAG, "ACTION_READY: missing MediaProjection data")
                     Toast.makeText(this, "Error: bad MediaProjection data", Toast.LENGTH_LONG).show()
                     stopSelf()
                     return START_NOT_STICKY
                 }
 
-                // Update notification now that we're actually running.
-                ServiceCompat.startForeground(
-                    this,
-                    BackpackerApp.NOTIFICATION_ID,
-                    buildNotification(),
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-                )
-                isRunning = true
-                startAutomation(resultCode, resultData)
+                enterReadyState(resultCode, resultData)
+            }
+
+            ACTION_RUN -> {
+                if (screenshotService != null) {
+                    startLoop()
+                } else {
+                    Log.e(TAG, "ACTION_RUN ignored — not in READY state")
+                }
+            }
+
+            ACTION_PAUSE -> {
+                stopLoop()
             }
 
             ACTION_STOP -> {
-                Log.i(TAG, "Stop action received")
-                stopAutomation()
+                Log.i(TAG, "ACTION_STOP received")
+                stopLoop()
+                releaseAll()
                 stopSelf()
             }
         }
@@ -102,136 +104,204 @@ class AutomationService : Service() {
     }
 
     override fun onDestroy() {
-        stopAutomation()
+        stopLoop()
+        releaseAll()
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun startAutomation(resultCode: Int, resultData: Intent) {
+    // -------------------------------------------------------------------------
+    // State transitions
+    // -------------------------------------------------------------------------
+
+    /**
+     * PREPARING → READY.
+     * Creates [ScreenshotService] (and the underlying VirtualDisplay) but does not start
+     * the capture loop.  Switches the notification to the "overlay active" text.
+     */
+    private fun enterReadyState(resultCode: Int, resultData: Intent) {
         val mpManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         val mediaProjection = mpManager.getMediaProjection(resultCode, resultData)
 
+        screenshotService = ScreenshotService(this, mediaProjection) {
+            // Called on the main thread when the OS revokes the projection.
+            Log.w(TAG, "MediaProjection revoked — stopping")
+            stopLoop()
+            releaseAll()
+            stopSelf()
+            TapperService.instance?.hideOverlay()
+        }
+
+        isReady = true
+        ServiceCompat.startForeground(
+            this,
+            BackpackerApp.NOTIFICATION_ID,
+            buildReadyNotification(),
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+        )
+        Log.i(TAG, "READY — MediaProjection obtained, VirtualDisplay live")
+    }
+
+    /**
+     * READY → RUNNING.
+     * Creates a fresh [CoroutineScope] and [AutomationEngine] and starts the capture loop.
+     */
+    private fun startLoop() {
         val tapper = TapperService.instance
         if (tapper == null) {
-            Log.e(TAG, "TapperService not connected — accessibility service must be enabled first")
-            mediaProjection.stop()
-            stopSelf()
+            Log.e(TAG, "startLoop: TapperService not connected")
             return
         }
 
-        // Create a fresh scope for this run.  Reusing a cancelled scope silently drops launches.
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        automationEngine = AutomationEngine(screenshotService!!, tapper, this)
 
-        screenshotService = ScreenshotService(this, mediaProjection) {
-            // Called on the main thread when the OS revokes the MediaProjection.
-            Log.w(TAG, "MediaProjection revoked externally — stopping service")
-            stopAutomation()
-            stopSelf()
-        }
-        automationEngine = AutomationEngine(screenshotService!!, tapper)
+        scope!!.launch { automationEngine!!.run() }
 
-        scope!!.launch {
-            automationEngine!!.run()
-        }
-
-        // Confirm screen capture is working by capturing one frame and toasting its dimensions.
-        scope!!.launch {
-            delay(500) // give the VirtualDisplay time to produce its first frame
-            val bmp = screenshotService?.capture()
-            val msg = if (bmp != null) {
-                val w = bmp.width
-                val h = bmp.height
-                bmp.recycle()
-                "Screenshot OK: ${w}×${h}"
-            } else {
-                "Screenshot failed (null) — capture not ready"
-            }
-            withContext(Dispatchers.Main) {
-                Toast.makeText(this@AutomationService, msg, Toast.LENGTH_LONG).show()
-            }
-        }
-
-        Log.i(TAG, "Automation started")
+        isRunning = true
+        ServiceCompat.startForeground(
+            this,
+            BackpackerApp.NOTIFICATION_ID,
+            buildRunningNotification(),
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+        )
+        Log.i(TAG, "RUNNING — capture loop started")
     }
 
-    private fun stopAutomation() {
-        isRunning = false
+    /**
+     * RUNNING → READY.
+     * Cancels the coroutine scope and engine; leaves [ScreenshotService] and projection intact
+     * so the loop can be restarted without a new consent dialog.
+     */
+    private fun stopLoop() {
+        if (!isRunning) return
         automationEngine?.stop()
-        screenshotService?.release()
-        screenshotService = null
         automationEngine = null
         scope?.cancel()
         scope = null
-        // Reset the overlay FAB so it doesn't stay in the RUNNING state after
-        // the service dies (which would require the user to toggle the a11y service).
+        isRunning = false
         TapperService.instance?.notifyAutomationStopped()
-        Log.i(TAG, "Automation stopped")
+        if (isReady) {
+            ServiceCompat.startForeground(
+                this,
+                BackpackerApp.NOTIFICATION_ID,
+                buildReadyNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+            )
+        }
+        Log.i(TAG, "Loop stopped — back to READY")
     }
 
-    private fun buildPreparingNotification(): Notification {
-        return NotificationCompat.Builder(this, BackpackerApp.CHANNEL_ID)
+    /**
+     * READY → stopped.
+     * Releases [ScreenshotService] and the MediaProjection token.
+     * Always call [stopLoop] first.
+     */
+    private fun releaseAll() {
+        screenshotService?.release()
+        screenshotService = null
+        isReady = false
+        Log.i(TAG, "Projection released")
+    }
+
+    // -------------------------------------------------------------------------
+    // Notifications
+    // -------------------------------------------------------------------------
+
+    private fun buildPreparingNotification(): Notification =
+        NotificationCompat.Builder(this, BackpackerApp.CHANNEL_ID)
             .setContentTitle("Backpacker")
             .setContentText("Requesting screen capture permission…")
             .setSmallIcon(R.drawable.ic_notification)
-            .setOngoing(true)
-            .setSilent(true)
+            .setOngoing(true).setSilent(true)
             .build()
-    }
 
-    private fun buildNotification(): Notification {
+    private fun buildReadyNotification(): Notification =
+        NotificationCompat.Builder(this, BackpackerApp.CHANNEL_ID)
+            .setContentTitle("Backpacker")
+            .setContentText("Overlay active — tap the FAB to start")
+            .setSmallIcon(R.drawable.ic_notification)
+            .setOngoing(true).setSilent(true)
+            .build()
+
+    private fun buildRunningNotification(): Notification {
         val contentIntent = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE
         )
-
         val stopIntent = PendingIntent.getService(
             this, 1,
             Intent(this, AutomationService::class.java).apply { action = ACTION_STOP },
             PendingIntent.FLAG_IMMUTABLE
         )
-
         return NotificationCompat.Builder(this, BackpackerApp.CHANNEL_ID)
             .setContentTitle("Backpacker Running")
-            .setContentText("Spinning Pokéstops automatically…")
+            .setContentText("Capture loop active…")
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(contentIntent)
             .addAction(0, "Stop", stopIntent)
-            .setOngoing(true)
-            .setSilent(true)
+            .setOngoing(true).setSilent(true)
             .build()
     }
+
+    // -------------------------------------------------------------------------
+    // Companion
+    // -------------------------------------------------------------------------
 
     companion object {
         private const val TAG = "AutomationService"
 
         const val ACTION_PREPARE = "io.github.joeyparrish.backpacker.ACTION_PREPARE"
-        const val ACTION_START   = "io.github.joeyparrish.backpacker.ACTION_START"
+        const val ACTION_READY   = "io.github.joeyparrish.backpacker.ACTION_READY"
+        const val ACTION_RUN     = "io.github.joeyparrish.backpacker.ACTION_RUN"
+        const val ACTION_PAUSE   = "io.github.joeyparrish.backpacker.ACTION_PAUSE"
         const val ACTION_STOP    = "io.github.joeyparrish.backpacker.ACTION_STOP"
         const val EXTRA_RESULT_CODE = "extra_result_code"
         const val EXTRA_RESULT_DATA = "extra_result_data"
 
+        /** True while the capture loop coroutine is running. */
         @Volatile var isRunning = false
             private set
 
-        /** Must be called before [startMediaProjectionConsent] to satisfy Android 14 timing. */
+        /** True while a MediaProjection token is held (loop may or may not be active). */
+        @Volatile var isReady = false
+            private set
+
+        /** Step 1: call before showing the consent dialog to satisfy Android 14 timing. */
         fun prepare(context: Context) {
             context.startForegroundService(
                 Intent(context, AutomationService::class.java).apply { action = ACTION_PREPARE }
             )
         }
 
-        fun start(context: Context, resultCode: Int, resultData: Intent) {
+        /** Step 2: call with the consent result to store the token and enter READY state. */
+        fun ready(context: Context, resultCode: Int, resultData: Intent) {
             context.startForegroundService(
                 Intent(context, AutomationService::class.java).apply {
-                    action = ACTION_START
+                    action = ACTION_READY
                     putExtra(EXTRA_RESULT_CODE, resultCode)
                     putExtra(EXTRA_RESULT_DATA, resultData)
                 }
             )
         }
 
+        /** Start (or resume) the capture loop.  No-op if not in READY state. */
+        fun run(context: Context) {
+            context.startService(
+                Intent(context, AutomationService::class.java).apply { action = ACTION_RUN }
+            )
+        }
+
+        /** Pause the capture loop.  Projection is kept so [run] can restart without consent. */
+        fun pause(context: Context) {
+            context.startService(
+                Intent(context, AutomationService::class.java).apply { action = ACTION_PAUSE }
+            )
+        }
+
+        /** Release the projection and stop the foreground service entirely. */
         fun stop(context: Context) {
             context.startService(
                 Intent(context, AutomationService::class.java).apply { action = ACTION_STOP }
