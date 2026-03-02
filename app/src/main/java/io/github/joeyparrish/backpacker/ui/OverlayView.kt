@@ -1,6 +1,8 @@
 package io.github.joeyparrish.backpacker.ui
 
 import android.content.Context
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.graphics.PixelFormat
 import android.util.Log
 import android.view.ContextThemeWrapper
@@ -59,6 +61,7 @@ class OverlayView(
     private val DRAG_THRESHOLD_DP = 12f
 
     init {
+        updateAppearance()   // apply idle appearance before the view is first shown
         setupTouchHandler()
     }
 
@@ -80,7 +83,17 @@ class OverlayView(
     }
 
     private fun updateAppearance() {
-        binding.fabToggle.alpha = if (isRunning) 1.0f else 0.75f
+        if (isRunning) {
+            // RUNNING: cyan background, black icon, fully opaque — clearly "active"
+            binding.fabToggle.alpha = 1.0f
+            binding.fabToggle.backgroundTintList = ColorStateList.valueOf(COLOR_CYAN)
+            binding.fabToggle.imageTintList = ColorStateList.valueOf(Color.BLACK)
+        } else {
+            // IDLE: black background, cyan icon, slightly dimmed — visually "inactive"
+            binding.fabToggle.alpha = 0.70f
+            binding.fabToggle.backgroundTintList = ColorStateList.valueOf(Color.BLACK)
+            binding.fabToggle.imageTintList = null  // original icon colors (cyan from drawable)
+        }
     }
 
     /**
@@ -145,5 +158,8 @@ class OverlayView(
 
     companion object {
         private const val TAG = "OverlayView"
+
+        /** Pokéstop cyan — matches the app icon and the idle FAB icon color. */
+        private val COLOR_CYAN = Color.parseColor("#FF17C8FF")
     }
 }

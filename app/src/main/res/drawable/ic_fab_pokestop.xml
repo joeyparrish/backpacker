@@ -2,16 +2,16 @@
 <!--
     Floating-action-button icon: Pokéstop silhouette scaled to 24 dp.
 
-    Geometry matches ic_launcher_foreground.xml (108-dp viewport) scaled by
-    24/108 ≈ 0.222 and translated so the content fills the 24×24 viewport:
+    Geometry (24×24 viewport), designed to fill the icon slot:
 
-      • Outer ring (annulus)  centre (12,10)  outer r=8   inner r=6
-      • Inner disc            centre (12,10)  r=5.5  (0.5 dp gap to ring)
-      • Pole                  1 dp wide, y 15.5–20.5
-      • Base platform         9 dp wide, y 20.5–22
+      • Outer ring (annulus)  centre (12,10)  outer r=9   inner r=7
+      • Inner disc            centre (12,10)  r=6   (1 dp gap to ring)
+      • Pole                  1.2 dp wide, y 16–21.5
+      • Base platform         13 dp wide, y 21.5–23
 
-    All paths are cyan (#17C8FF) — the FAB sets backgroundTint black so the
-    result mirrors the launcher icon: cyan Pokéstop on black.
+    Content spans x=3–21 (75 % of viewport) and y=1–23 (92 % of viewport).
+    All paths are cyan (#17C8FF); OverlayView tints the icon black when
+    the FAB is in the RUNNING state (black-on-cyan inversion).
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
@@ -19,31 +19,31 @@
     android:viewportWidth="24"
     android:viewportHeight="24">
 
-    <!-- Outer ring: annulus via even-odd fill (outer r=8, inner r=6, centre 12,10) -->
+    <!-- Outer ring: annulus via even-odd fill (outer r=9, inner r=7, centre 12,10) -->
     <path
         android:fillType="evenOdd"
         android:fillColor="#17C8FF"
         android:pathData="
-            M 20,10 A 8,8 0 0 1 12,18 A 8,8 0 0 1 4,10
-                    A 8,8 0 0 1 12,2  A 8,8 0 0 1 20,10 Z
-            M 18,10 A 6,6 0 0 1 12,16 A 6,6 0 0 1 6,10
-                    A 6,6 0 0 1 12,4  A 6,6 0 0 1 18,10 Z" />
+            M 21,10 A 9,9 0 0 1 12,19 A 9,9 0 0 1 3,10
+                    A 9,9 0 0 1 12,1  A 9,9 0 0 1 21,10 Z
+            M 19,10 A 7,7 0 0 1 12,17 A 7,7 0 0 1 5,10
+                    A 7,7 0 0 1 12,3  A 7,7 0 0 1 19,10 Z" />
 
-    <!-- Inner disc: r=5.5, centre (12,10) -->
+    <!-- Inner disc: r=6, centre (12,10) — 1 dp gap to ring inner edge -->
     <path
         android:fillColor="#17C8FF"
         android:pathData="
-            M 17.5,10 A 5.5,5.5 0 0 1 12,15.5 A 5.5,5.5 0 0 1 6.5,10
-                      A 5.5,5.5 0 0 1 12,4.5  A 5.5,5.5 0 0 1 17.5,10 Z" />
+            M 18,10 A 6,6 0 0 1 12,16 A 6,6 0 0 1 6,10
+                    A 6,6 0 0 1 12,4  A 6,6 0 0 1 18,10 Z" />
 
-    <!-- Pole: 1 dp wide, connects disc bottom to base -->
+    <!-- Pole: 1.2 dp wide, connects disc bottom to base -->
     <path
         android:fillColor="#17C8FF"
-        android:pathData="M 11.5,15.5 L 12.5,15.5 L 12.5,20.5 L 11.5,20.5 Z" />
+        android:pathData="M 11.4,16 L 12.6,16 L 12.6,21.5 L 11.4,21.5 Z" />
 
-    <!-- Base platform: 9 dp wide, 1.5 dp tall -->
+    <!-- Base platform: 13 dp wide, 1.5 dp tall -->
     <path
         android:fillColor="#17C8FF"
-        android:pathData="M 7.5,20.5 L 16.5,20.5 L 16.5,22 L 7.5,22 Z" />
+        android:pathData="M 5.5,21.5 L 18.5,21.5 L 18.5,23 L 5.5,23 Z" />
 
 </vector>
