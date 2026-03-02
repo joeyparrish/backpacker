@@ -15,11 +15,14 @@ import io.github.joeyparrish.backpacker.BackpackerApp
 import io.github.joeyparrish.backpacker.R
 import io.github.joeyparrish.backpacker.automation.AutomationEngine
 import io.github.joeyparrish.backpacker.ui.MainActivity
+import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Foreground service that owns the MediaProjection token and runs the AutomationEngine.
@@ -125,6 +128,23 @@ class AutomationService : Service() {
 
         scope!!.launch {
             automationEngine!!.run()
+        }
+
+        // Confirm screen capture is working by capturing one frame and toasting its dimensions.
+        scope!!.launch {
+            delay(500) // give the VirtualDisplay time to produce its first frame
+            val bmp = screenshotService?.capture()
+            val msg = if (bmp != null) {
+                val w = bmp.width
+                val h = bmp.height
+                bmp.recycle()
+                "Screenshot OK: ${w}×${h}"
+            } else {
+                "Screenshot failed (null) — capture not ready"
+            }
+            withContext(Dispatchers.Main) {
+                Toast.makeText(this@AutomationService, msg, Toast.LENGTH_LONG).show()
+            }
         }
 
         Log.i(TAG, "Automation started")
