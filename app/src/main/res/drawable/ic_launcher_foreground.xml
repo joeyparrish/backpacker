@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Stylized "BP" monogram on the adaptive icon foreground layer -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,30 L30,78 L50,78 Q68,78 68,60 Q68,46 50,46 L46,46 L46,54 L50,54 Q58,54 58,60 Q58,66 50,66 L40,66 L40,30 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M72,54 L78,30 L88,30 L78,78 L68,78 L58,30 L68,30 Z" />
+</vector>

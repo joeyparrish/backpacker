@@ -1,0 +1,27 @@
+# Gradle cache and build outputs
+.gradle/
+build/
+**/build/
+
+# Local machine-specific config (contains SDK path — never commit)
+local.properties
+
+# Android Studio / IntelliJ IDEA project files
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Kotlin incremental compilation data
+**/.kotlin/
+
+# Generated APKs and App Bundles
+*.apk
+*.aab
+
+# ProGuard mapping files (regenerated each release build)
+*.map
+
+# OS cruft
+.DS_Store
+Thumbs.db

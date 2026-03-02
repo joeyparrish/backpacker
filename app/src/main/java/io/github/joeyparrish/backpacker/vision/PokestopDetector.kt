@@ -1,0 +1,105 @@
+package io.github.joeyparrish.backpacker.vision
+
+import android.graphics.Bitmap
+import android.graphics.PointF
+import android.util.Log
+import io.github.joeyparrish.backpacker.util.BitmapUtils
+import org.opencv.core.Core
+import org.opencv.core.Mat
+import org.opencv.core.MatOfPoint
+import org.opencv.core.Rect
+import org.opencv.core.Scalar
+import org.opencv.core.Size
+import org.opencv.imgproc.Imgproc
+
+/**
+ * Detects ready (cyan/blue) Pokéstop discs in a 720p-normalized map screenshot.
+ *
+ * Algorithm (see PLAN.md §3a):
+ *   1. Convert RGBA → HSV
+ *   2. Threshold with a cyan HSV mask
+ *   3. Morphological close to fill gaps
+ *   4. Find contours; filter by bounding-box HEIGHT only (width varies with disc rotation)
+ *   5. Return centroids sorted by distance from screen centre
+ *
+ * All threshold constants are initial guesses — calibrate against real screenshots.
+ */
+class PokestopDetector {
+
+    // HSV lower/upper bounds for the cyan disc colour (OpenCV: H 0-180, S/V 0-255)
+    private val hsvLower = Scalar(85.0, 150.0, 150.0)
+    private val hsvUpper = Scalar(105.0, 255.0, 255.0)
+
+    /** Min bounding-box height (720p px) for a valid disc contour. Calibrate from screenshots. */
+    private val minDiscHeight = 20
+
+    /** Max bounding-box height (720p px). Discard tall UI chrome. */
+    private val maxDiscHeight = 120
+
+    private val morphKernelSize = Size(5.0, 5.0)
+
+    /**
+     * Detect Pokéstop disc centroids in [screenshot].
+     * Returns a list of 720p-normalised centroid coordinates, nearest-centre-first.
+     */
+    fun detect(screenshot: Bitmap): List<PointF> {
+        val scaled = BitmapUtils.scaleTo720p(screenshot)
+        val normWidth = scaled.width
+        val normHeight = scaled.height
+
+        val rgba = BitmapUtils.bitmapToMat(scaled)
+        val hsv = Mat()
+        val mask = Mat()
+        val morphed = Mat()
+
+        try {
+            Imgproc.cvtColor(rgba, hsv, Imgproc.COLOR_RGBA2RGB)
+            Imgproc.cvtColor(hsv, hsv, Imgproc.COLOR_RGB2HSV)
+            Core.inRange(hsv, hsvLower, hsvUpper, mask)
+
+            val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, morphKernelSize)
+            Imgproc.morphologyEx(mask, morphed, Imgproc.MORPH_CLOSE, kernel)
+
+            val contours = mutableListOf<MatOfPoint>()
+            val hierarchy = Mat()
+            Imgproc.findContours(
+                morphed, contours, hierarchy,
+                Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE
+            )
+            hierarchy.release()
+
+            val screenCx = normWidth / 2f
+            val screenCy = normHeight / 2f
+            val centroids = mutableListOf<PointF>()
+
+            for (contour in contours) {
+                val bb: Rect = Imgproc.boundingRect(contour)
+                if (bb.height in minDiscHeight..maxDiscHeight) {
+                    val cx = (bb.x + bb.width / 2).toFloat()
+                    val cy = (bb.y + bb.height / 2).toFloat()
+                    centroids.add(PointF(cx, cy))
+                }
+                contour.release()
+            }
+
+            centroids.sortBy { pt ->
+                val dx = pt.x - screenCx
+                val dy = pt.y - screenCy
+                dx * dx + dy * dy
+            }
+
+            Log.d(TAG, "Detected ${centroids.size} Pokéstop disc(s)")
+            return centroids
+
+        } finally {
+            rgba.release()
+            hsv.release()
+            mask.release()
+            morphed.release()
+        }
+    }
+
+    companion object {
+        private const val TAG = "PokestopDetector"
+    }
+}

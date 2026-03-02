@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Backpacker</string>
+    <string name="accessibility_service_label">Backpacker Gesture Service</string>
+    <string name="accessibility_service_description">Backpacker uses this service to inject swipe and tap gestures into Pokémon GO for automated Pokéstop spinning. No game data is read — only touch input is simulated.</string>
+
+    <!-- MainActivity labels -->
+    <string name="permission_accessibility_title">1. Enable Gesture Service</string>
+    <string name="permission_accessibility_desc">Required to simulate swipes and taps inside Pokémon GO.</string>
+    <string name="permission_accessibility_button">Open Accessibility Settings</string>
+    <string name="permission_notification_title">2. Allow Notifications</string>
+    <string name="permission_notification_desc">Required to keep the background service alive.</string>
+    <string name="permission_notification_button">Grant Notification Permission</string>
+    <string name="permission_battery_title">3. Disable Battery Optimization</string>
+    <string name="permission_battery_desc">Prevents Android from killing the automation service.</string>
+    <string name="permission_battery_button">Disable Battery Optimization</string>
+    <string name="start_automation">Start Automation</string>
+    <string name="stop_automation">Stop Automation</string>
+    <string name="status_accessibility_ok">Gesture service: ENABLED</string>
+    <string name="status_accessibility_missing">Gesture service: DISABLED</string>
+</resources>

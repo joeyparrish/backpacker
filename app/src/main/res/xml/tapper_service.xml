@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    AccessibilityService configuration for TapperService.
+
+    android:canPerformGestures="true"  — enables dispatchGesture() API for tap/swipe injection.
+    android:accessibilityEventTypes="typeAllMask" — required for the service to stay alive;
+        TapperService does not actually process any events (it only injects them).
+    android:canRetrieveWindowContent="false" — we never read window contents, so keep disabled
+        to reduce permission scope.
+    android:settingsActivity — links to MainActivity so the user can access the onboarding
+        UI from the Accessibility settings page.
+-->
+<accessibility-service
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeAllMask"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="false"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="100"
+    android:settingsActivity="io.github.joeyparrish.backpacker.ui.MainActivity" />
