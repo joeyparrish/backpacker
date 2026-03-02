@@ -65,12 +65,17 @@ class AutomationService : Service() {
             }
 
             ACTION_START -> {
-                val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, -1)
+                // NOTE: Activity.RESULT_OK = -1, so -1 is a *valid* result code.
+                // Use Int.MIN_VALUE as the sentinel for "extra not present".
+                val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Int.MIN_VALUE)
                 @Suppress("DEPRECATION")
                 val resultData: Intent? = intent.getParcelableExtra(EXTRA_RESULT_DATA)
 
-                if (resultCode == -1 || resultData == null) {
+                Toast.makeText(this, "ACTION_START received (rc=$resultCode)", Toast.LENGTH_SHORT).show()
+
+                if (resultCode == Int.MIN_VALUE || resultData == null) {
                     Log.e(TAG, "Invalid MediaProjection data; stopping service")
+                    Toast.makeText(this, "Error: bad MediaProjection data", Toast.LENGTH_LONG).show()
                     stopSelf()
                     return START_NOT_STICKY
                 }

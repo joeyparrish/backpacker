@@ -57,8 +57,9 @@ class AutomationEngine(
         running = false
     }
 
+    // DEBUG: scan loop truncated — capture only, no image processing or gestures.
     private suspend fun scanLoop() {
-        Log.d(TAG, "Scan loop iteration")
+        Log.d(TAG, "Scan loop: capturing screenshot")
 
         val screenshot = screenshotService.capture() ?: run {
             Log.w(TAG, "Screenshot returned null — VirtualDisplay not ready?")
@@ -66,69 +67,10 @@ class AutomationEngine(
             return
         }
 
-        val screenWidth = screenshotService.screenWidth
-        val discs = pokestopDetector.detect(screenshot)
+        Log.i(TAG, "Screenshot captured: ${screenshot.width}×${screenshot.height}")
         screenshot.recycle()
 
-        if (discs.isEmpty()) {
-            Log.d(TAG, "No Pokéstops detected. Sleeping ${IDLE_SLEEP_MS / 1000}s.")
-            delay(IDLE_SLEEP_MS)
-            return
-        }
-
-        Log.d(TAG, "Found ${discs.size} disc(s). Processing...")
-
-        for (normPt in discs) {
-            if (!running || !coroutineContext.isActive) return
-
-            val tapX = CoordinateTransform.toDeviceX(normPt.x, screenWidth)
-            val tapY = CoordinateTransform.toDeviceY(normPt.y, screenWidth)
-            tapperService.tap(tapX, tapY)
-            delay(TAP_TO_DETAIL_MS)
-
-            delay(RANGE_CHECK_MS)
-            val detailShot = screenshotService.capture() ?: continue
-            val inRange = spinnerDetector.isInRange(detailShot)
-            detailShot.recycle()
-
-            if (!inRange) {
-                Log.d(TAG, "Stop out of range — backing out")
-                tapperService.back()
-                delay(BACK_TO_MAP_MS)
-                continue
-            }
-
-            var spinSuccess = false
-            for (attempt in 1..MAX_SPIN_ATTEMPTS) {
-                if (!running) break
-
-                Log.d(TAG, "Spin attempt $attempt/$MAX_SPIN_ATTEMPTS")
-                val swipeX1 = CoordinateTransform.toDeviceX(SPIN_X_START_NORM, screenWidth)
-                val swipeX2 = CoordinateTransform.toDeviceX(SPIN_X_END_NORM, screenWidth)
-                val swipeY  = CoordinateTransform.toDeviceY(SPIN_Y_NORM, screenWidth)
-                tapperService.swipe(swipeX1, swipeY, swipeX2, swipeY, SPIN_DURATION_MS)
-
-                delay(SPIN_RESULT_MS)
-
-                val resultShot = screenshotService.capture() ?: break
-                spinSuccess = spinnerDetector.isSpinSuccess(resultShot)
-                resultShot.recycle()
-
-                if (spinSuccess) {
-                    Log.i(TAG, "Spin succeeded on attempt $attempt")
-                    break
-                }
-
-                if (attempt < MAX_SPIN_ATTEMPTS) delay(SPIN_RETRY_MS)
-            }
-
-            if (!spinSuccess) Log.w(TAG, "All spin attempts exhausted for this stop")
-
-            tapperService.back()
-            delay(BACK_TO_MAP_MS)
-        }
-
-        Log.d(TAG, "All discs processed. Re-scanning in ${IDLE_SLEEP_MS / 1000}s.")
+        Log.d(TAG, "Sleeping ${IDLE_SLEEP_MS / 1000}s before next capture")
         delay(IDLE_SLEEP_MS)
     }
 
