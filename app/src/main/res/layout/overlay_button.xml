@@ -19,6 +19,7 @@
         app:srcCompat="@drawable/ic_fab_pokestop"
         app:tint="@null"
         app:backgroundTint="@color/black"
+        app:maxImageSize="40dp"
         android:contentDescription="Toggle automation"
         android:alpha="0.85" />
 
