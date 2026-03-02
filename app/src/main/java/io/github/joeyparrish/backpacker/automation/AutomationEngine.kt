@@ -43,7 +43,9 @@ class AutomationEngine(
         while (running && coroutineContext.isActive) {
             try {
                 scanLoop()
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // Catch Throwable (not just Exception) so that Errors such as
+                // OutOfMemoryError don't escape the coroutine and crash the process.
                 Log.e(TAG, "Error in scan loop: $e")
                 delay(5_000)
             }

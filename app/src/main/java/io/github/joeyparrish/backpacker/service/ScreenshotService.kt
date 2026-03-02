@@ -9,7 +9,7 @@ import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.util.DisplayMetrics
 import android.util.Log
-import android.view.WindowManager
+import android.view.Display
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -31,7 +31,6 @@ class ScreenshotService(
 ) {
     /** True once the system stops the MediaProjection from outside the app. */
     private val projectionStopped = AtomicBoolean(false)
-    private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
     private val displayWidth: Int
     private val displayHeight: Int
@@ -41,9 +40,14 @@ class ScreenshotService(
     private val virtualDisplay: VirtualDisplay
 
     init {
+        // Use DisplayManager to obtain physical screen metrics.  Calling
+        // WindowManager.getDefaultDisplay() from a Service context is deprecated and can behave
+        // unexpectedly on Android 15 (the service has no associated window).
+        val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+        val display = displayManager.getDisplay(Display.DEFAULT_DISPLAY)
         val metrics = DisplayMetrics()
         @Suppress("DEPRECATION")
-        windowManager.defaultDisplay.getRealMetrics(metrics)
+        display.getRealMetrics(metrics)
         displayWidth = metrics.widthPixels
         displayHeight = metrics.heightPixels
         displayDpi = metrics.densityDpi
@@ -65,10 +69,13 @@ class ScreenshotService(
             }
         }, null)
 
+        // Use flag 0 (no special flags) for screen capture.  VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR
+        // requires the privileged CAPTURE_SECURE_VIDEO_OUTPUT permission on Android 15 and can
+        // cause a SecurityException; it is not needed for plain screenshot capture.
         virtualDisplay = mediaProjection.createVirtualDisplay(
             "BackpackerCapture",
             displayWidth, displayHeight, displayDpi,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+            0,
             imageReader.surface,
             null, null
         )

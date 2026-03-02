@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.projection.MediaProjectionManager
-import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -25,22 +24,43 @@ import kotlinx.coroutines.launch
 /**
  * Foreground service that owns the MediaProjection token and runs the AutomationEngine.
  *
+ * Android 14 (API 34) requires that the foreground service with
+ * FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION is already running and has called startForeground()
+ * BEFORE the MediaProjection consent dialog (createScreenCaptureIntent) is shown.
+ *
  * Lifecycle:
- *   1. MainActivity obtains the MediaProjection consent Intent.
- *   2. MainActivity calls [start], passing resultCode and data Intent.
- *   3. This service calls startForeground immediately, then creates ScreenshotService
- *      and AutomationEngine and starts the coroutine loop.
- *   4. [stop] (or the notification action) cancels the coroutine and releases resources.
+ *   1. Caller sends ACTION_PREPARE before showing the consent dialog.
+ *      The service enters foreground with FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION so the OS
+ *      allows the upcoming createVirtualDisplay() call.
+ *   2. User accepts the consent dialog; caller sends ACTION_START with resultCode + data.
+ *   3. Service creates ScreenshotService and AutomationEngine and starts the coroutine loop.
+ *   4. ACTION_STOP (or notification action, or MediaProjection revoked) stops everything.
  */
 class AutomationService : Service() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // Recreated on each startAutomation() so that stopping and restarting works correctly.
+    // A cancelled CoroutineScope cannot launch new coroutines, so we must not reuse it.
+    private var scope: CoroutineScope? = null
 
     private var screenshotService: ScreenshotService? = null
     private var automationEngine: AutomationEngine? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
+
+            ACTION_PREPARE -> {
+                // Enter foreground with the mediaProjection type BEFORE the consent dialog is
+                // shown.  This satisfies the Android 14 requirement that the service is already
+                // a foreground mediaProjection service when createVirtualDisplay() is later called.
+                ServiceCompat.startForeground(
+                    this,
+                    BackpackerApp.NOTIFICATION_ID,
+                    buildPreparingNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                )
+                Log.i(TAG, "AutomationService prepared — awaiting MediaProjection consent")
+            }
+
             ACTION_START -> {
                 val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, -1)
                 @Suppress("DEPRECATION")
@@ -52,9 +72,7 @@ class AutomationService : Service() {
                     return START_NOT_STICKY
                 }
 
-                // On Android 10+ (API 29) startForeground must declare the service type;
-                // on Android 14+ this is strictly enforced for mediaProjection services.
-                // ServiceCompat handles the version check automatically.
+                // Update notification now that we're actually running.
                 ServiceCompat.startForeground(
                     this,
                     BackpackerApp.NOTIFICATION_ID,
@@ -94,6 +112,9 @@ class AutomationService : Service() {
             return
         }
 
+        // Create a fresh scope for this run.  Reusing a cancelled scope silently drops launches.
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
         screenshotService = ScreenshotService(this, mediaProjection) {
             // Called on the main thread when the OS revokes the MediaProjection.
             Log.w(TAG, "MediaProjection revoked externally — stopping service")
@@ -102,7 +123,7 @@ class AutomationService : Service() {
         }
         automationEngine = AutomationEngine(screenshotService!!, tapper)
 
-        scope.launch {
+        scope!!.launch {
             automationEngine!!.run()
         }
 
@@ -115,11 +136,22 @@ class AutomationService : Service() {
         screenshotService?.release()
         screenshotService = null
         automationEngine = null
-        scope.cancel()
+        scope?.cancel()
+        scope = null
         // Reset the overlay FAB so it doesn't stay in the RUNNING state after
         // the service dies (which would require the user to toggle the a11y service).
         TapperService.instance?.notifyAutomationStopped()
         Log.i(TAG, "Automation stopped")
+    }
+
+    private fun buildPreparingNotification(): Notification {
+        return NotificationCompat.Builder(this, BackpackerApp.CHANNEL_ID)
+            .setContentTitle("Backpacker")
+            .setContentText("Requesting screen capture permission…")
+            .setSmallIcon(R.drawable.ic_notification)
+            .setOngoing(true)
+            .setSilent(true)
+            .build()
     }
 
     private fun buildNotification(): Notification {
@@ -149,13 +181,21 @@ class AutomationService : Service() {
     companion object {
         private const val TAG = "AutomationService"
 
-        const val ACTION_START = "io.github.joeyparrish.backpacker.ACTION_START"
-        const val ACTION_STOP  = "io.github.joeyparrish.backpacker.ACTION_STOP"
+        const val ACTION_PREPARE = "io.github.joeyparrish.backpacker.ACTION_PREPARE"
+        const val ACTION_START   = "io.github.joeyparrish.backpacker.ACTION_START"
+        const val ACTION_STOP    = "io.github.joeyparrish.backpacker.ACTION_STOP"
         const val EXTRA_RESULT_CODE = "extra_result_code"
         const val EXTRA_RESULT_DATA = "extra_result_data"
 
         @Volatile var isRunning = false
             private set
+
+        /** Must be called before [startMediaProjectionConsent] to satisfy Android 14 timing. */
+        fun prepare(context: Context) {
+            context.startForegroundService(
+                Intent(context, AutomationService::class.java).apply { action = ACTION_PREPARE }
+            )
+        }
 
         fun start(context: Context, resultCode: Int, resultData: Intent) {
             context.startForegroundService(

@@ -45,6 +45,9 @@ class MainActivity : AppCompatActivity() {
             AutomationService.start(this, result.resultCode, result.data!!)
             updateToggleButton()
         } else {
+            // User denied the consent dialog; stop the prepared foreground service so it
+            // doesn't linger with its "Requesting permission…" notification.
+            AutomationService.stop(this)
             Toast.makeText(this, "Screen capture permission denied", Toast.LENGTH_SHORT).show()
         }
     }
@@ -105,6 +108,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startMediaProjectionConsent() {
+        // Android 14+: the foreground service with FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION must
+        // be running and have called startForeground() BEFORE the consent dialog is shown.
+        // Prepare the service first so the upcoming createVirtualDisplay() won't throw
+        // SecurityException.
+        AutomationService.prepare(this)
         val mpManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         mpLauncher.launch(mpManager.createScreenCaptureIntent())
     }
