@@ -116,6 +116,9 @@ class AutomationService : Service() {
         screenshotService = null
         automationEngine = null
         scope.cancel()
+        // Reset the overlay FAB so it doesn't stay in the RUNNING state after
+        // the service dies (which would require the user to toggle the a11y service).
+        TapperService.instance?.notifyAutomationStopped()
         Log.i(TAG, "Automation stopped")
     }
 

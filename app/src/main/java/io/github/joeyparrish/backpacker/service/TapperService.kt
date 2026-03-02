@@ -93,6 +93,15 @@ class TapperService : AccessibilityService() {
         }
     }
 
+    /**
+     * Called by AutomationService when it stops (cleanly or via onDestroy) so the
+     * overlay FAB is reset to IDLE.  Without this the button stays full-opacity
+     * after a crash and the user has to toggle the a11y service to recover.
+     */
+    fun notifyAutomationStopped() {
+        overlayView?.setState(OverlayView.State.IDLE)
+    }
+
     companion object {
         private const val TAG = "TapperService"
         const val EXTRA_START_FROM_OVERLAY = "start_from_overlay"
