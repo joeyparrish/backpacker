@@ -5,10 +5,13 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.media.projection.MediaProjectionManager
+import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import io.github.joeyparrish.backpacker.BackpackerApp
 import io.github.joeyparrish.backpacker.R
 import io.github.joeyparrish.backpacker.automation.AutomationEngine
@@ -49,7 +52,15 @@ class AutomationService : Service() {
                     return START_NOT_STICKY
                 }
 
-                startForeground(BackpackerApp.NOTIFICATION_ID, buildNotification())
+                // On Android 10+ (API 29) startForeground must declare the service type;
+                // on Android 14+ this is strictly enforced for mediaProjection services.
+                // ServiceCompat handles the version check automatically.
+                ServiceCompat.startForeground(
+                    this,
+                    BackpackerApp.NOTIFICATION_ID,
+                    buildNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                )
                 isRunning = true
                 startAutomation(resultCode, resultData)
             }
@@ -83,7 +94,12 @@ class AutomationService : Service() {
             return
         }
 
-        screenshotService = ScreenshotService(this, mediaProjection)
+        screenshotService = ScreenshotService(this, mediaProjection) {
+            // Called on the main thread when the OS revokes the MediaProjection.
+            Log.w(TAG, "MediaProjection revoked externally — stopping service")
+            stopAutomation()
+            stopSelf()
+        }
         automationEngine = AutomationEngine(screenshotService!!, tapper)
 
         scope.launch {

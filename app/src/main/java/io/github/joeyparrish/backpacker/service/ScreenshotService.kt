@@ -10,17 +10,27 @@ import android.media.projection.MediaProjection
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.WindowManager
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Wraps the Android MediaProjection API to provide on-demand screen captures.
  *
- * Note: On Android 14+ the MediaProjection token is single-use per service start.
- * A new consent dialog must be shown each time AutomationService starts.
+ * Android 14 (API 34) requirements:
+ *   • A [MediaProjection.Callback] MUST be registered before calling createVirtualDisplay();
+ *     omitting it causes createVirtualDisplay() to throw IllegalStateException.
+ *   • The token is single-use per consent grant; a new dialog is required each start.
+ *
+ * @param onProjectionStop  Called (on the main thread) when the system revokes the
+ *                          MediaProjection (e.g. the user dismisses the cast tile).
+ *                          AutomationService uses this to stop itself cleanly.
  */
 class ScreenshotService(
     context: Context,
-    private val mediaProjection: MediaProjection
+    private val mediaProjection: MediaProjection,
+    private val onProjectionStop: () -> Unit = {}
 ) {
+    /** True once the system stops the MediaProjection from outside the app. */
+    private val projectionStopped = AtomicBoolean(false)
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
     private val displayWidth: Int
@@ -44,6 +54,17 @@ class ScreenshotService(
             /* maxImages = */ 2
         )
 
+        // Required on Android 14+ (API 34+): register a callback BEFORE calling
+        // createVirtualDisplay(), or the call throws IllegalStateException.
+        // Passing null as the Handler runs the callback on the main-thread Looper.
+        mediaProjection.registerCallback(object : MediaProjection.Callback() {
+            override fun onStop() {
+                Log.w(TAG, "MediaProjection stopped by system or user")
+                projectionStopped.set(true)
+                onProjectionStop()
+            }
+        }, null)
+
         virtualDisplay = mediaProjection.createVirtualDisplay(
             "BackpackerCapture",
             displayWidth, displayHeight, displayDpi,
@@ -61,6 +82,7 @@ class ScreenshotService(
      * The caller owns the returned Bitmap and should recycle it when done.
      */
     fun capture(): Bitmap? {
+        if (projectionStopped.get()) return null
         val image = imageReader.acquireLatestImage() ?: return null
 
         return try {
