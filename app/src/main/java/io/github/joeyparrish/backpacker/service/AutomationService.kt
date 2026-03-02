@@ -43,6 +43,9 @@ import kotlinx.coroutines.withContext
  */
 class AutomationService : Service() {
 
+    /** Scan frequency mode — declared at class level so it is resolvable as AutomationService.ScanMode. */
+    enum class ScanMode { HOUSE, CAR }
+
     private var screenshotService: ScreenshotService? = null
 
     // Scope + engine are recreated on each ACTION_RUN so a cancelled scope is never reused.
@@ -269,8 +272,6 @@ class AutomationService : Service() {
         const val EXTRA_RESULT_CODE = "extra_result_code"
         const val EXTRA_RESULT_DATA = "extra_result_data"
         const val EXTRA_MODE        = "extra_mode"
-
-        enum class ScanMode { HOUSE, CAR }
 
         /** True while the capture loop coroutine is running. */
         @Volatile var isRunning = false
