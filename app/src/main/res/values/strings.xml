@@ -14,8 +14,7 @@
     <string name="permission_battery_title">3. Disable Battery Optimization</string>
     <string name="permission_battery_desc">Prevents Android from killing the automation service.</string>
     <string name="permission_battery_button">Disable Battery Optimization</string>
-    <string name="enable_overlay">Enable Overlay</string>
-    <string name="disable_overlay">Disable Overlay</string>
+    <string name="overlay_label">Overlay enabled</string>
     <string name="debug_scan_label">Debug scan: show stop markers</string>
     <string name="status_accessibility_ok">Gesture service: ENABLED</string>
     <string name="status_accessibility_missing">Gesture service: DISABLED</string>

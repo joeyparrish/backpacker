@@ -116,14 +116,13 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Start/Stop button -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnToggle"
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switchOverlay"
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:text="@string/enable_overlay"
-            android:textSize="16sp"
-            app:cornerRadius="8dp" />
+            android:layout_height="wrap_content"
+            android:text="@string/overlay_label"
+            app:thumbTint="?attr/colorPrimary"
+            app:trackTint="?attr/colorPrimary" />
 
         <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/switchDebugScan"

@@ -27,7 +27,7 @@ import io.github.joeyparrish.backpacker.service.TapperService
 /**
  * Onboarding + control activity.
  *
- * Walks the user through required permissions, then offers an "Enable Overlay" button that:
+ * Walks the user through required permissions, then offers a switch that:
  *   1. Prepares the AutomationService foreground service (Android 14 timing requirement).
  *   2. Shows the MediaProjection consent dialog.
  *   3. On grant: stores the token (READY state) and shows the floating FAB overlay.
@@ -35,11 +35,17 @@ import io.github.joeyparrish.backpacker.service.TapperService
  * Once the overlay is active the user interacts with the FAB directly.  The FAB toggles
  * the capture loop (RUNNING ↔ READY) without needing to return to this activity.
  *
- * "Disable Overlay" hides the FAB and releases the MediaProjection token.
+ * Toggling the switch off hides the FAB and releases the MediaProjection token.
  */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
+
+    /**
+     * Guards against [updateOverlaySwitch] triggering [setOnCheckedChangeListener]
+     * when we programmatically update the switch state.
+     */
+    private var updatingOverlaySwitch = false
 
     private val mpLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -48,10 +54,11 @@ class MainActivity : AppCompatActivity() {
             // Permission granted: enter READY state then show the overlay.
             AutomationService.ready(this, result.resultCode, result.data!!)
             TapperService.instance?.showOverlay()
-            updateOverlayButton()
+            updateOverlaySwitch()
         } else {
-            // User denied — clean up the prepared foreground service.
+            // User denied — clean up the prepared foreground service and reset the switch.
             AutomationService.stop(this)
+            updateOverlaySwitch()
             Toast.makeText(this, "Screen capture permission denied", Toast.LENGTH_SHORT).show()
         }
     }
@@ -77,7 +84,12 @@ class MainActivity : AppCompatActivity() {
         binding.btnOpenAccessibility.setOnClickListener { openAccessibilitySettings() }
         binding.btnRequestNotification.setOnClickListener { requestNotificationPermission() }
         binding.btnBattery.setOnClickListener { openBatteryOptimizationSettings() }
-        binding.btnToggle.setOnClickListener { handleOverlayToggle() }
+
+        binding.switchOverlay.setOnCheckedChangeListener { _, checked ->
+            if (updatingOverlaySwitch) return@setOnCheckedChangeListener
+            if (checked) enableOverlay() else disableOverlay()
+        }
+
         binding.switchDebugScan.setOnCheckedChangeListener { _, checked ->
             AutomationEngine.debugScan = checked
             OverlayView.skipCarMode = checked
@@ -93,17 +105,10 @@ class MainActivity : AppCompatActivity() {
     // Overlay enable / disable
     // -------------------------------------------------------------------------
 
-    private fun handleOverlayToggle() {
-        if (TapperService.isOverlayShown) {
-            disableOverlay()
-        } else {
-            enableOverlay()
-        }
-    }
-
     private fun enableOverlay() {
         if (!isAccessibilityEnabled()) {
             Toast.makeText(this, "Enable the Accessibility service first", Toast.LENGTH_LONG).show()
+            updateOverlaySwitch()   // snap switch back to off
             return
         }
         // Step 1: start the foreground service so Android 14's timing requirement is satisfied
@@ -126,11 +131,11 @@ class MainActivity : AppCompatActivity() {
     private fun disableOverlay() {
         TapperService.instance?.hideOverlay()
         AutomationService.stop(this)
-        updateOverlayButton()
+        updateOverlaySwitch()
     }
 
     // -------------------------------------------------------------------------
-    // Status + button state
+    // Status + switch state
     // -------------------------------------------------------------------------
 
     private fun updateStatus() {
@@ -146,19 +151,18 @@ class MainActivity : AppCompatActivity() {
         binding.btnOpenAccessibility.isEnabled = !a11yOk
         binding.btnRequestNotification.isEnabled = !notifOk
         binding.btnBattery.isEnabled = !batteryOk
-        binding.btnToggle.isEnabled = a11yOk
-        updateOverlayButton()
+        binding.switchOverlay.isEnabled = a11yOk
+        updateOverlaySwitch()
 
         Log.d(TAG, "Status — a11y=$a11yOk notif=$notifOk battery=$batteryOk " +
                 "overlayShown=${TapperService.isOverlayShown} " +
                 "ready=${AutomationService.isReady} running=${AutomationService.isRunning}")
     }
 
-    private fun updateOverlayButton() {
-        binding.btnToggle.text = if (TapperService.isOverlayShown)
-            getString(R.string.disable_overlay)
-        else
-            getString(R.string.enable_overlay)
+    private fun updateOverlaySwitch() {
+        updatingOverlaySwitch = true
+        binding.switchOverlay.isChecked = TapperService.isOverlayShown
+        updatingOverlaySwitch = false
     }
 
     // -------------------------------------------------------------------------
