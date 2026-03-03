@@ -79,6 +79,16 @@ class PokestopDetector {
 
             for (contour in contours) {
                 val bb: Rect = Imgproc.boundingRect(contour)
+                val area = Imgproc.contourArea(contour)
+
+                // Log all non-trivial contours so thresholds can be calibrated from logcat.
+                if (area >= 50) {
+                    val passed = bb.height in minDiscHeight..maxDiscHeight
+                    Log.d(TAG, "Contour @ (${bb.x},${bb.y}): " +
+                            "h=${bb.height} w=${bb.width} area=${area.toInt()} " +
+                            "→ ${if (passed) "PASS" else "SKIP (h not in $minDiscHeight..$maxDiscHeight)"}")
+                }
+
                 if (bb.height in minDiscHeight..maxDiscHeight) {
                     val M = Imgproc.moments(contour)
                     if (M.m00 > 0) {
@@ -100,7 +110,7 @@ class PokestopDetector {
                 dx * dx + dy * dy
             }
 
-            Log.d(TAG, "Detected ${detections.size} Pokéstop disc(s)")
+            Log.d(TAG, "Detected ${detections.size} Pokéstop disc(s) (of ${contours.size} total contours)")
             return detections
 
         } finally {
