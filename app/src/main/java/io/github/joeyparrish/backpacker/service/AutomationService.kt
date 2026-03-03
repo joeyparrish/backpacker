@@ -95,11 +95,13 @@ class AutomationService : Service() {
 
             ACTION_PAUSE -> {
                 stopLoop()
+                TapperService.instance?.notifyAutomationStopped()
             }
 
             ACTION_STOP -> {
                 Log.i(TAG, "ACTION_STOP received")
                 stopLoop()
+                TapperService.instance?.notifyAutomationStopped()
                 releaseAll()
                 stopSelf()
             }
@@ -110,6 +112,7 @@ class AutomationService : Service() {
 
     override fun onDestroy() {
         stopLoop()
+        TapperService.instance?.notifyAutomationStopped()
         releaseAll()
         super.onDestroy()
     }
@@ -184,6 +187,9 @@ class AutomationService : Service() {
      * RUNNING → READY.
      * Cancels the coroutine scope and engine; leaves [ScreenshotService] and projection intact
      * so the loop can be restarted without a new consent dialog.
+     *
+     * Does NOT reset the FAB — callers that intend to pause (not switch modes) must call
+     * [TapperService.notifyAutomationStopped] themselves after this returns.
      */
     private fun stopLoop() {
         if (!isRunning) return
@@ -192,7 +198,6 @@ class AutomationService : Service() {
         scope?.cancel()
         scope = null
         isRunning = false
-        TapperService.instance?.notifyAutomationStopped()
         if (isReady) {
             ServiceCompat.startForeground(
                 this,
