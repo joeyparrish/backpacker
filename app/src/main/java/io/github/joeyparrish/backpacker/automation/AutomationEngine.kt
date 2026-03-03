@@ -32,6 +32,8 @@ class AutomationEngine(
 
     suspend fun run() {
         Log.i(TAG, "AutomationEngine starting")
+        // Brief pause so any UI state changes (FAB icon, overlays) settle before first capture.
+        delay(500)
         while (running && coroutineContext.isActive) {
             try {
                 scanLoop()
