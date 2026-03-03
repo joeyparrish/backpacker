@@ -236,7 +236,7 @@ class AutomationService : Service() {
     private fun buildReadyNotification(): Notification =
         NotificationCompat.Builder(this, BackpackerApp.CHANNEL_ID)
             .setContentTitle("Backpacker")
-            .setContentText("Overlay active — tap the FAB to start")
+            .setContentText("Ready - tap the button to activate")
             .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true).setSilent(true)
             .build()
