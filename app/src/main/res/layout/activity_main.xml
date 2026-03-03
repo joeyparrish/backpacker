@@ -121,8 +121,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/overlay_label"
-            app:thumbTint="?attr/colorPrimary"
-            app:trackTint="?attr/colorPrimary" />
+            app:thumbTint="@color/switch_thumb_tint"
+            app:trackTint="@color/switch_track_tint" />
 
         <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/switchDebugScan"
@@ -130,8 +130,8 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="@string/debug_scan_label"
-            app:thumbTint="?attr/colorPrimary"
-            app:trackTint="?attr/colorPrimary" />
+            app:thumbTint="@color/switch_thumb_tint"
+            app:trackTint="@color/switch_track_tint" />
 
     </LinearLayout>
 </ScrollView>
