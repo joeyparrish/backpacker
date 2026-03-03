@@ -36,6 +36,8 @@ class AutomationEngine(
     // Cancelled before each new toast so rapid scans don't queue up or get rate-limited.
     private var lastToast: Toast? = null
 
+    private var sessionSpins = 0
+
     suspend fun run() {
         Log.i(TAG, "AutomationEngine starting")
         // Brief pause so any UI state changes (FAB icon, overlays) settle before first capture.
@@ -147,7 +149,13 @@ class AutomationEngine(
             check.recycle()
 
             if (success) {
-                Log.i(TAG, "Spin succeeded on attempt $attempt")
+                sessionSpins++
+                Log.i(TAG, "Spin succeeded on attempt $attempt (session total: $sessionSpins)")
+                withContext(Dispatchers.Main) {
+                    lastToast?.cancel()
+                    lastToast = Toast.makeText(context, "Spins: $sessionSpins", Toast.LENGTH_SHORT)
+                    lastToast?.show()
+                }
                 return
             }
             Log.d(TAG, "Spin attempt $attempt failed (range or network)")
