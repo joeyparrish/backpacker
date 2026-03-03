@@ -6,6 +6,7 @@ import android.graphics.RectF
 import android.util.Log
 import io.github.joeyparrish.backpacker.util.BitmapUtils
 import org.opencv.core.Core
+import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint
 import org.opencv.core.Rect
@@ -86,6 +87,15 @@ class PokestopDetector {
 
                 // Log all non-trivial contours so thresholds can be calibrated from logcat.
                 if (area >= 50) {
+                    // Measure mean HSV within this contour so we can calibrate the hue filter.
+                    val contourMask = Mat.zeros(normHeight, normWidth, CvType.CV_8UC1)
+                    Imgproc.drawContours(contourMask, listOf(contour), 0, Scalar(255.0), -1)
+                    val meanHsv = Core.mean(hsv, contourMask)
+                    contourMask.release()
+                    val mH = meanHsv.`val`[0].toInt()
+                    val mS = meanHsv.`val`[1].toInt()
+                    val mV = meanHsv.`val`[2].toInt()
+
                     val verdict = when {
                         bb.height !in minDiscHeight..maxDiscHeight ->
                             "SKIP (h=${bb.height} not in $minDiscHeight..$maxDiscHeight)"
@@ -94,7 +104,10 @@ class PokestopDetector {
                         else -> "PASS"
                     }
                     Log.d(TAG, "Contour @ (${bb.x},${bb.y}): " +
-                            "h=${bb.height} w=${bb.width} area=${area.toInt()} → $verdict")
+                            "h=${bb.height} w=${bb.width} area=${area.toInt()} " +
+                            "meanHSV=($mH,$mS,$mV) " +
+                            "[H filter: ${hsvLower.`val`[0].toInt()}..${hsvUpper.`val`[0].toInt()}] " +
+                            "→ $verdict")
                 }
 
                 if (bb.height in minDiscHeight..maxDiscHeight && area >= minArea) {
