@@ -81,6 +81,14 @@ class DebugOverlayView(context: Context) {
         private val density = resources.displayMetrics.density
         private val arm = 22f * density
 
+        // The TYPE_ACCESSIBILITY_OVERLAY window's content area starts below the status bar
+        // even with FLAG_LAYOUT_IN_SCREEN, but the VirtualDisplay captures from physical y=0.
+        // Translate the canvas up by status bar height so coordinates align.
+        private val statusBarOffset: Float = run {
+            val id = resources.getIdentifier("status_bar_height", "dimen", "android")
+            (if (id > 0) resources.getDimensionPixelSize(id) else 0).toFloat()
+        }
+
         private val xPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.RED
             strokeWidth = 5f * density
@@ -94,6 +102,8 @@ class DebugOverlayView(context: Context) {
         }
 
         override fun onDraw(canvas: Canvas) {
+            canvas.save()
+            canvas.translate(0f, -statusBarOffset)
             for (r in bounds) {
                 canvas.drawRect(r, rectPaint)
             }
@@ -101,6 +111,7 @@ class DebugOverlayView(context: Context) {
                 canvas.drawLine(pt.x - arm, pt.y - arm, pt.x + arm, pt.y + arm, xPaint)
                 canvas.drawLine(pt.x + arm, pt.y - arm, pt.x - arm, pt.y + arm, xPaint)
             }
+            canvas.restore()
         }
     }
 
