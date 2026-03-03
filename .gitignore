@@ -28,3 +28,6 @@ Thumbs.db
 
 # Editor cruft
 *.sw*
+
+# Output of battery tests
+trial-*.txt
