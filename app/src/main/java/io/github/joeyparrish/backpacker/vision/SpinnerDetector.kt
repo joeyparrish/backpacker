@@ -9,72 +9,17 @@ import org.opencv.core.Scalar
 import org.opencv.imgproc.Imgproc
 
 /**
- * Detects the spinner circle on the Pokéstop detail screen and determines
- * whether a spin attempt succeeded. See PLAN.md §3b.
+ * Determines whether a Pokéstop spin attempt succeeded.
  *
- * All threshold constants are initial guesses — calibrate against real screenshots.
+ * Range is not checked — if the stop opens, we attempt to spin it.
+ * Both network failures and out-of-range failures are handled by the
+ * caller's retry loop.
  */
 class SpinnerDetector {
-
-    /** Min radius (720p px) for spinner to be "in range". Calibrate from screenshots. */
-    private val minInRangeRadius = 80.0
-
-    private val cannyThresh = 100.0
-    private val accThresh = 30.0
 
     /** HSV bounds for the "spun" (purple/grey) colour after a successful spin. */
     private val spunHsvLower = Scalar(120.0, 50.0, 80.0)
     private val spunHsvUpper = Scalar(160.0, 255.0, 255.0)
-
-    /**
-     * Detect the spinner circle and return its radius in 720p pixels, or null if not found.
-     */
-    fun detectSpinnerRadius(screenshot: Bitmap): Float? {
-        val scaled = BitmapUtils.scaleTo720p(screenshot)
-        val rgba = BitmapUtils.bitmapToMat(scaled)
-        val gray = Mat()
-        val circles = Mat()
-
-        try {
-            Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
-            Imgproc.GaussianBlur(gray, gray, org.opencv.core.Size(9.0, 9.0), 2.0)
-
-            Imgproc.HoughCircles(
-                gray, circles, Imgproc.HOUGH_GRADIENT,
-                /* dp = */ 1.0,
-                /* minDist = */ gray.rows() / 4.0,
-                /* param1 = */ cannyThresh,
-                /* param2 = */ accThresh,
-                /* minRadius = */ (minInRangeRadius * 0.5).toInt(),
-                /* maxRadius = */ (gray.cols() * 0.55).toInt()
-            )
-
-            if (circles.cols() == 0) {
-                Log.d(TAG, "No spinner circle detected")
-                return null
-            }
-
-            var bestRadius = 0f
-            for (i in 0 until circles.cols()) {
-                val data = circles.get(0, i) ?: continue
-                val r = data[2].toFloat()
-                if (r > bestRadius) bestRadius = r
-            }
-
-            Log.d(TAG, "Spinner radius: $bestRadius px (min in-range: $minInRangeRadius)")
-            return if (bestRadius > 0) bestRadius else null
-
-        } finally {
-            rgba.release()
-            gray.release()
-            circles.release()
-        }
-    }
-
-    fun isInRange(screenshot: Bitmap): Boolean {
-        val radius = detectSpinnerRadius(screenshot) ?: return false
-        return radius >= minInRangeRadius
-    }
 
     /**
      * Check for spin success by looking for the "spun" purple/grey colour in the

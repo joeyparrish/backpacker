@@ -103,24 +103,20 @@ All CV runs on captured `Bitmap`s converted to OpenCV `Mat` objects.
 
 **Skipping already-spun (purple) discs:** No separate detection pipeline is needed. The cyan HSV mask simply will not match purple discs. They are ignored automatically.
 
-### 3b. Spinner Circle Detection (Stop Detail Screen)
+### 3b. Spin Success Detection (Stop Detail Screen)
 
-After tapping a disc, the stop detail view opens. The spinner circle must be detected to:
-1. Confirm the stop is in range (circle is large) vs. out of range (circle is small/absent)
-2. Confirm a successful spin (color change or reward items appear)
-
-**Approach: Hough Circle Transform**
-
-1. Convert to grayscale, apply Gaussian blur
-2. Run `Imgproc.HoughCircles` with `HOUGH_GRADIENT`
-3. The spinnable state has a large circle (roughly 60–75% of the screen's shorter dimension in diameter). Out-of-range shows either no circle or a noticeably smaller one.
-4. Define a minimum radius threshold (calibrate from screenshots). If no circle of sufficient size is detected after a short wait, the stop is out of range → abandon.
+After tapping a disc, the stop detail view opens. We immediately attempt to spin —
+no range check is performed. If the stop is slightly out of range, the spin will
+simply fail, which is handled by the retry loop exactly the same as a network failure.
 
 **Spin success detection:** After the swipe gesture, one of two things appears:
 - Item reward bubbles floating up (items were received) — spin succeeded
-- The circle remains the same color with no items — spin may have failed (network issue)
+- The circle remains the same color with no items — spin failed (network or range)
 
-Detect success by checking for a color/brightness change in the circle region, or by looking for the presence of item icons in the area above the circle. A simpler approach: check if the circle has turned from its spinnable color (blue-ish) to a "spun" color (purple/grey). Calibrate from screenshots.
+Detect success by checking if the circle region has turned from its spinnable color
+(blue-ish) to a "spun" color (purple/grey). Check the centre 50%×40% ROI for the
+spun HSV range (H=120–160, S=50–255, V=80–255); threshold >10% of pixels.
+Calibrate from screenshots.
 
 ---
 
@@ -138,19 +134,14 @@ START (toggle activated)
 │       ├─ TAP disc centroid
 │       ├─ Wait 800–1200ms for detail view to open
 │       │
-│       ├─ RANGE CHECK
-│       │   ├─ Capture screenshot
-│       │   ├─ Run HoughCircles
-│       │   ├─ If circle too small or absent → tap BACK → continue to next disc
-│       │   └─ Circle is large enough → proceed
-│       │
 │       ├─ SPIN ATTEMPT LOOP (max 3 attempts, 2s delay between)
 │       │   ├─ Perform horizontal swipe across circle center
 │       │   ├─ Wait 1500ms for network response
 │       │   ├─ Capture screenshot
-│       │   ├─ Check for spin success (color change / item reward)
+│       │   ├─ Check for spin success (purple/grey colour change)
 │       │   ├─ If success → break out of spin loop
 │       │   └─ If failed and attempts remain → retry
+│       │       (range failures and network failures are treated identically)
 │       │
 │       ├─ If all attempts exhausted → log failure, continue
 │       │
@@ -226,8 +217,6 @@ The following values cannot be hardcoded without real screenshots and must be tu
 | Cyan HSV range | Color of a ready (blue/cyan) disc | Capture screenshot, sample disc pixels in HSV |
 | Min disc bounding box height | Smallest disc visible on screen | Measure bounding box height in pixels at 720p |
 | Max disc bounding box height | Largest disc visible | Same — should not vary much from min |
-| Spinner circle min radius (in-range) | Radius of circle when stop is spinnable | Measure at 720p |
-| Spinner circle max radius (out-of-range cutoff) | Radius when stop is too far | Same |
 | Spin success color range | Circle color after successful spin | Sample in HSV |
 | Step delays | Time for animations to settle | Empirical testing on target device |
 
@@ -245,8 +234,7 @@ These should be captured at the native device resolution. The CV pipeline will i
 
 | Risk | Mitigation |
 |---|---|
-| GPS wander moves stop out of range after tap | Range check via HoughCircles after opening detail view; abandon if out of range |
-| Network failure causes spin not to register | Retry loop (max 3 attempts, 2s apart) with success detection after each |
+| GPS wander or network failure causes spin not to register | Retry loop (max 3 attempts, 2s apart); both failure modes handled identically |
 | Android kills background service (battery optimization) | Foreground service + notification; instruct user to exempt app from battery optimization (see dontkillmyapp.com for device-specific steps) |
 | MediaProjection consent required on Android 14+ | Re-prompt user at each service start; handle `onActivityResult` in MainActivity and pass token to service |
 | Game UI updates change visual appearance | HSV bounds and circle size thresholds stored as configurable constants, easy to retune |
@@ -274,7 +262,7 @@ These should be captured at the native device resolution. The CV pipeline will i
 2. `TapperService`: AccessibilityService shell, confirm gesture dispatch works (test with a simple tap on a known coordinate)
 3. `ScreenshotService`: MediaProjection setup, confirm screenshot capture works (write a bitmap to storage for visual verification)
 4. `PokestopDetector`: HSV + contour pipeline; test with static screenshots; tune HSV bounds
-5. `SpinnerDetector`: HoughCircles pipeline; test with static screenshots
+5. `SpinnerDetector`: spin-success colour detection; test with static screenshots
 6. `AutomationEngine`: Wire up the state machine with real device testing
 7. Overlay UI: Floating button, drag-to-reposition
 8. MainActivity: Permission onboarding flow
