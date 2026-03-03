@@ -2,6 +2,7 @@ package io.github.joeyparrish.backpacker.vision
 
 import android.graphics.Bitmap
 import android.graphics.PointF
+import android.graphics.RectF
 import android.util.Log
 import io.github.joeyparrish.backpacker.util.BitmapUtils
 import org.opencv.core.Core
@@ -38,11 +39,15 @@ class PokestopDetector {
 
     private val morphKernelSize = Size(5.0, 5.0)
 
+    /** A single detection: moment centroid + bounding box, both in 720p-normalised space. */
+    data class Disc(val centroid: PointF, val bounds: RectF)
+
     /**
      * Detect Pokéstop disc centroids in [screenshot].
-     * Returns a list of 720p-normalised centroid coordinates, nearest-centre-first.
+     * Returns a list of [Disc] (centroid + bounding box) in 720p-normalised space,
+     * nearest-centre-first.
      */
-    fun detect(screenshot: Bitmap): List<PointF> {
+    fun detect(screenshot: Bitmap): List<Disc> {
         val scaled = BitmapUtils.scaleTo720p(screenshot)
         val normWidth = scaled.width
         val normHeight = scaled.height
@@ -70,33 +75,33 @@ class PokestopDetector {
 
             val screenCx = normWidth / 2f
             val screenCy = normHeight / 2f
-            val centroids = mutableListOf<PointF>()
+            val detections = mutableListOf<Disc>()
 
             for (contour in contours) {
                 val bb: Rect = Imgproc.boundingRect(contour)
                 if (bb.height in minDiscHeight..maxDiscHeight) {
-                    // Use contour moments for the centroid rather than the bounding-box midpoint.
-                    // A Pokéstop disc sits on top of a thin pole; both are cyan, so the bounding
-                    // box includes the pole below the disc.  The moment centroid is weighted toward
-                    // the disc (larger area) and therefore lands on the disc rather than the pole.
                     val M = Imgproc.moments(contour)
                     if (M.m00 > 0) {
                         val cx = (M.m10 / M.m00).toFloat()
                         val cy = (M.m01 / M.m00).toFloat()
-                        centroids.add(PointF(cx, cy))
+                        val bounds = RectF(
+                            bb.x.toFloat(), bb.y.toFloat(),
+                            (bb.x + bb.width).toFloat(), (bb.y + bb.height).toFloat()
+                        )
+                        detections.add(Disc(PointF(cx, cy), bounds))
                     }
                 }
                 contour.release()
             }
 
-            centroids.sortBy { pt ->
-                val dx = pt.x - screenCx
-                val dy = pt.y - screenCy
+            detections.sortBy { d ->
+                val dx = d.centroid.x - screenCx
+                val dy = d.centroid.y - screenCy
                 dx * dx + dy * dy
             }
 
-            Log.d(TAG, "Detected ${centroids.size} Pokéstop disc(s)")
-            return centroids
+            Log.d(TAG, "Detected ${detections.size} Pokéstop disc(s)")
+            return detections
 
         } finally {
             rgba.release()

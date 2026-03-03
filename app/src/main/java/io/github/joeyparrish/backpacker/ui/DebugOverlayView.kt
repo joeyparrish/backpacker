@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.PointF
+import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -38,10 +39,11 @@ class DebugOverlayView(context: Context) {
 
     private val hideRunnable = Runnable { hide() }
 
-    /** Show X markers at [points] (device pixels) and auto-hide after [DISPLAY_MS] ms. */
-    fun showMarkers(points: List<PointF>) {
+    /** Show X markers and bounding boxes (device pixels) and auto-hide after [DISPLAY_MS] ms. */
+    fun showMarkers(centroids: List<PointF>, bounds: List<RectF>) {
         handler.removeCallbacks(hideRunnable)
-        markerView.points = points
+        markerView.centroids = centroids
+        markerView.bounds = bounds
         if (!isAttached) {
             try {
                 windowManager.addView(markerView, layoutParams)
@@ -70,25 +72,34 @@ class DebugOverlayView(context: Context) {
 
     private class MarkerView(context: Context) : View(context) {
 
-        var points: List<PointF> = emptyList()
-            set(value) {
-                field = value
-                invalidate()
-            }
+        var centroids: List<PointF> = emptyList()
+            set(value) { field = value; invalidate() }
+
+        var bounds: List<RectF> = emptyList()
+            set(value) { field = value; invalidate() }
 
         private val density = resources.displayMetrics.density
         private val arm = 22f * density
 
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        private val xPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.RED
             strokeWidth = 5f * density
             style = Paint.Style.STROKE
         }
 
+        private val rectPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.YELLOW
+            strokeWidth = 3f * density
+            style = Paint.Style.STROKE
+        }
+
         override fun onDraw(canvas: Canvas) {
-            for (pt in points) {
-                canvas.drawLine(pt.x - arm, pt.y - arm, pt.x + arm, pt.y + arm, paint)
-                canvas.drawLine(pt.x + arm, pt.y - arm, pt.x - arm, pt.y + arm, paint)
+            for (r in bounds) {
+                canvas.drawRect(r, rectPaint)
+            }
+            for (pt in centroids) {
+                canvas.drawLine(pt.x - arm, pt.y - arm, pt.x + arm, pt.y + arm, xPaint)
+                canvas.drawLine(pt.x + arm, pt.y - arm, pt.x - arm, pt.y + arm, xPaint)
             }
         }
     }

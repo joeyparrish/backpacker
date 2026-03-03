@@ -2,6 +2,7 @@ package io.github.joeyparrish.backpacker.automation
 
 import android.content.Context
 import android.graphics.PointF
+import android.graphics.RectF
 import android.util.Log
 import android.widget.Toast
 import io.github.joeyparrish.backpacker.service.ScreenshotService
@@ -65,16 +66,24 @@ class AutomationEngine(
             val discs = pokestopDetector.detect(screenshot)
             screenshot.recycle()
 
-            val devicePoints = discs.map { pt ->
+            val deviceCentroids = discs.map { d ->
                 PointF(
-                    CoordinateTransform.toDeviceX(pt.x, w),
-                    CoordinateTransform.toDeviceY(pt.y, w)
+                    CoordinateTransform.toDeviceX(d.centroid.x, w),
+                    CoordinateTransform.toDeviceY(d.centroid.y, w)
+                )
+            }
+            val deviceBounds = discs.map { d ->
+                RectF(
+                    CoordinateTransform.toDeviceX(d.bounds.left, w),
+                    CoordinateTransform.toDeviceY(d.bounds.top, w),
+                    CoordinateTransform.toDeviceX(d.bounds.right, w),
+                    CoordinateTransform.toDeviceY(d.bounds.bottom, w)
                 )
             }
 
             withContext(Dispatchers.Main) {
                 Toast.makeText(context, "Stops: ${discs.size}", Toast.LENGTH_SHORT).show()
-                tapperService.showDebugMarkers(devicePoints)
+                tapperService.showDebugMarkers(deviceCentroids, deviceBounds)
             }
         } else {
             screenshot.recycle()
