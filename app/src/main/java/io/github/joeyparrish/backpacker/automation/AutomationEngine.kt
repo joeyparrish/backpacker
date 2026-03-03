@@ -44,7 +44,7 @@ class AutomationEngine(
     suspend fun run() {
         Log.i(TAG, "AutomationEngine starting")
         // Brief pause so any UI state changes (FAB icon, overlays) settle before first capture.
-        delay(500)
+        delay(SETTLE_DELAY_MS)
 
         if (debugSpinner) {
             runSpinnerDebugCheck()
@@ -59,7 +59,7 @@ class AutomationEngine(
                 scanLoop()
             } catch (e: Throwable) {
                 Log.e(TAG, "Error in scan loop: $e")
-                delay(5_000)
+                delay(ERROR_RECOVERY_DELAY_MS)
             }
         }
         Log.i(TAG, "AutomationEngine stopped")
@@ -89,7 +89,7 @@ class AutomationEngine(
 
         val screenshot = screenshotService.capture() ?: run {
             Log.w(TAG, "Screenshot returned null — VirtualDisplay not ready?")
-            delay(2_000)
+            delay(VD_RETRY_DELAY_MS)
             return
         }
         val t1 = System.currentTimeMillis()
@@ -316,14 +316,17 @@ class AutomationEngine(
 
         // Poll interval when the screen is off — short enough to resume promptly,
         // long enough not to spin the CPU while the display is dark.
-        private const val SCREEN_OFF_POLL_MS   = 5_000L
+        private const val SCREEN_OFF_POLL_MS     = 5_000L
 
         // Timing constants
-        private const val OPEN_DELAY_MS        = 1_000L  // wait for detail view animation
-        private const val SWIPE_DURATION_MS    =   300L  // swipe gesture length
-        private const val NUM_SPIN_ATTEMPTS    =    10L  // spin this many times
-        private const val SPIN_RESULT_DELAY_MS =   500L  // delay before checking spin result
-        private const val SCAN_IMMEDIATELY_MS  =   500L  // scan right away
+        private const val SETTLE_DELAY_MS        =   500L  // FAB/overlay settle after activation
+        private const val VD_RETRY_DELAY_MS      = 2_000L  // VirtualDisplay not ready yet
+        private const val ERROR_RECOVERY_DELAY_MS = 5_000L  // pause after unexpected scan error
+        private const val OPEN_DELAY_MS          = 1_000L  // wait for detail view animation
+        private const val SWIPE_DURATION_MS      =   300L  // swipe gesture length
+        private const val NUM_SPIN_ATTEMPTS      =    10L  // spin this many times
+        private const val SPIN_RESULT_DELAY_MS   =   500L  // delay before checking spin result
+        private const val SCAN_IMMEDIATELY_MS    =   500L  // scan right away
 
         const val PREFS_NAME         = "backpacker_prefs"
         const val PREF_LIFETIME_SPINS = "lifetime_spins"
