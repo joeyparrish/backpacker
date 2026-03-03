@@ -1,16 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    FAB icon: aerodynamic sports-car side profile (facing right), 24×24 dp viewport.
-    Body uses Bézier curves for smooth, organic lines.
+    FAB icon: sedan side-profile silhouette (facing right), 24×24 dp viewport.
+    Based on a stock sedan outline icon. All curves are Bézier.
 
     Body path (car faces RIGHT; rear is left, nose is right):
-      M 2,17 L 2,15       upright hatch/trunk
-      C 2,9 5,9 9,8       C-pillar: sweeps from vertical into roofline
-      L 14,8              flat roofline
-      C 18,8 20,12 21,13  A-pillar: horizontal roof into raked windshield base
-      L 22,13             short flat hood
-      C 23,13 23,15 22,17 rounded nose (bulges forward, sweeps down to underbody)
-      Z                   flat underbody back to (2,17)
+      M 1,17 L 1,14         upright rear face (trunk/bumper)
+      Q 2,13 3,12           rounded step at trunk-lid shoulder (C-pillar base)
+      C 5,9 7,7 9,7         C-pillar sweeps up into roofline
+      L 15,7                flat roofline
+      C 18,7 20,11 21,12    A-pillar: horizontal roof → raked windshield base
+      L 22,12               short flat hood
+      Q 23,15 22,17         rounded front bumper
+      Z                     flat underbody back to (1,17)
 
     • Rear wheel  — circle, centre (5,19),  r=2.5
     • Front wheel — circle, centre (18,19), r=2.5
@@ -24,16 +25,17 @@
     android:viewportWidth="24"
     android:viewportHeight="24">
 
-    <!-- Body: fastback silhouette with Bézier curves, facing right -->
+    <!-- Body: sedan silhouette with Bézier curves, facing right -->
     <path
         android:fillColor="#FFFFFF"
         android:pathData="
-            M 2,17 L 2,15
-            C 2,9 5,9 9,8
-            L 14,8
-            C 18,8 20,12 21,13
-            L 22,13
-            C 23,13 23,15 22,17
+            M 1,17 L 1,14
+            Q 2,13 3,12
+            C 5,9 7,7 9,7
+            L 15,7
+            C 18,7 20,11 21,12
+            L 22,12
+            Q 23,15 22,17
             Z" />
 
     <!-- Rear wheel: centre (5,19), r=2.5 -->
