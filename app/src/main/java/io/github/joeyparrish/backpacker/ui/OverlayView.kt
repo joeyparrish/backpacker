@@ -30,12 +30,13 @@ import kotlin.math.abs
  * Drag to reposition; lift without dragging to advance the state.
  */
 class OverlayView(
-    context: Context,
+    private val context: Context,
     private val onStateChange: (State) -> Unit
 ) {
     enum class State { IDLE, HOUSE, CAR }
 
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     private val themedContext = ContextThemeWrapper(context, R.style.Theme_Backpacker)
     private val binding = OverlayButtonBinding.inflate(LayoutInflater.from(themedContext))
@@ -51,8 +52,8 @@ class OverlayView(
         PixelFormat.TRANSLUCENT
     ).apply {
         gravity = Gravity.BOTTOM or Gravity.END
-        x = 32
-        y = 96
+        x = prefs.getInt(PREF_FAB_X, 32)
+        y = prefs.getInt(PREF_FAB_Y, 96)
     }
 
     private val DRAG_THRESHOLD_DP = 12f
@@ -143,7 +144,12 @@ class OverlayView(
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (!dragging) {
+                    if (dragging) {
+                        prefs.edit()
+                            .putInt(PREF_FAB_X, layoutParams.x)
+                            .putInt(PREF_FAB_Y, layoutParams.y)
+                            .apply()
+                    } else {
                         state = when (state) {
                             State.IDLE  -> State.HOUSE
                             State.HOUSE -> if (skipCarMode) State.IDLE else State.CAR
@@ -161,6 +167,10 @@ class OverlayView(
 
     companion object {
         private const val TAG = "Backpacker.OverlayView"
+
+        private const val PREFS_NAME  = "backpacker_prefs"
+        private const val PREF_FAB_X  = "fab_x"
+        private const val PREF_FAB_Y  = "fab_y"
 
         /** When true, the FAB cycles IDLE → HOUSE → IDLE (skips CAR). */
         @Volatile var skipCarMode = false
