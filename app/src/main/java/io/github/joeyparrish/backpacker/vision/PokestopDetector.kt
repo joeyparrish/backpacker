@@ -49,15 +49,26 @@ class PokestopDetector {
 
     private val morphKernelSize = Size(5.0, 5.0)
 
-    // A single detection: moment centroid + bounding box, both in 720p-normalised space.
+    /** A single detection: moment centroid + bounding box, both in 720p-normalised space. */
     data class Disc(val centroid: PointF, val bounds: RectF)
 
     /**
-     * Detect Pokéstop disc centroids in [screenshot].
-     * Returns a list of [Disc] (centroid + bounding box) in 720p-normalised space,
-     * nearest-centre-first.
+     * @param passed         Contours that passed all filters, nearest-centre-first.
+     * @param allBounds      Bounding boxes of every non-trivial contour (area ≥ 50).
+     * @param rejectedBounds Bounding boxes of contours that failed the height or area filter.
      */
-    fun detect(screenshot: Bitmap): List<Disc> {
+    data class DetectionResult(
+        val passed: List<Disc>,
+        val allBounds: List<RectF>,
+        val rejectedBounds: List<RectF>
+    )
+
+    /**
+     * Detect Pokéstop discs in [screenshot].
+     * Returns a [DetectionResult] with passing detections and all/rejected bounding boxes
+     * (both in 720p-normalised space) for debug overlay rendering.
+     */
+    fun detect(screenshot: Bitmap): DetectionResult {
         val scaled = BitmapUtils.scaleTo720p(screenshot)
         val normWidth = scaled.width
         val normHeight = scaled.height
@@ -86,6 +97,8 @@ class PokestopDetector {
             val screenCx = normWidth / 2f
             val screenCy = normHeight / 2f
             val detections = mutableListOf<Disc>()
+            val allBounds = mutableListOf<RectF>()
+            val rejectedBounds = mutableListOf<RectF>()
 
             for (contour in contours) {
                 val bb: Rect = Imgproc.boundingRect(contour)
@@ -112,20 +125,24 @@ class PokestopDetector {
                     Log.d(TAG, "Contour @ (${bb.x},${bb.y}): " +
                             "h=${bb.height} w=${bb.width} area=${area.toInt()} " +
                             "meanHSV=($mH,$mS,$mV) " +
-                            "[H filter: ${hsvLower.`val`[0].toInt()}..${hsvUpper.`val`[0].toInt()}] " +
                             "→ $verdict")
-                }
 
-                if (bb.height in minDiscHeight..maxDiscHeight && area >= minArea) {
-                    val M = Imgproc.moments(contour)
-                    if (M.m00 > 0) {
-                        val cx = (M.m10 / M.m00).toFloat()
-                        val cy = (M.m01 / M.m00).toFloat()
-                        val bounds = RectF(
-                            bb.x.toFloat(), bb.y.toFloat(),
-                            (bb.x + bb.width).toFloat(), (bb.y + bb.height).toFloat()
-                        )
-                        detections.add(Disc(PointF(cx, cy), bounds))
+                    val bounds = RectF(
+                        bb.x.toFloat(), bb.y.toFloat(),
+                        (bb.x + bb.width).toFloat(), (bb.y + bb.height).toFloat()
+                    )
+                    allBounds.add(bounds)
+
+                    val passes = bb.height in minDiscHeight..maxDiscHeight && area >= minArea
+                    if (!passes) {
+                        rejectedBounds.add(bounds)
+                    } else {
+                        val M = Imgproc.moments(contour)
+                        if (M.m00 > 0) {
+                            val cx = (M.m10 / M.m00).toFloat()
+                            val cy = (M.m01 / M.m00).toFloat()
+                            detections.add(Disc(PointF(cx, cy), bounds))
+                        }
                     }
                 }
                 contour.release()
@@ -138,7 +155,7 @@ class PokestopDetector {
             }
 
             Log.d(TAG, "Detected ${detections.size} Pokéstop disc(s) (of ${contours.size} total contours)")
-            return detections
+            return DetectionResult(detections, allBounds, rejectedBounds)
 
         } finally {
             rgba.release()

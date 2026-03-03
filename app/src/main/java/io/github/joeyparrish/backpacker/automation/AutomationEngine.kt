@@ -66,29 +66,30 @@ class AutomationEngine(
         val h = screenshot.height
 
         if (debugScan) {
-            val discs = pokestopDetector.detect(screenshot)
+            val result = pokestopDetector.detect(screenshot)
             screenshot.recycle()
 
-            val deviceCentroids = discs.map { d ->
-                PointF(
-                    CoordinateTransform.toDeviceX(d.centroid.x, w),
-                    CoordinateTransform.toDeviceY(d.centroid.y, w)
-                )
-            }
-            val deviceBounds = discs.map { d ->
-                RectF(
-                    CoordinateTransform.toDeviceX(d.bounds.left, w),
-                    CoordinateTransform.toDeviceY(d.bounds.top, w),
-                    CoordinateTransform.toDeviceX(d.bounds.right, w),
-                    CoordinateTransform.toDeviceY(d.bounds.bottom, w)
-                )
+            fun RectF.toDevice() = RectF(
+                CoordinateTransform.toDeviceX(left, w),
+                CoordinateTransform.toDeviceY(top, w),
+                CoordinateTransform.toDeviceX(right, w),
+                CoordinateTransform.toDeviceY(bottom, w)
+            )
+
+            // All non-trivial contours get a yellow bounding box.
+            val deviceAllBounds = result.allBounds.map { it.toDevice() }
+
+            // Rejected contours get a red X at their bounding-box centre.
+            val deviceRejectedCenters = result.rejectedBounds.map { r ->
+                val deviceRect = r.toDevice()
+                PointF(deviceRect.centerX(), deviceRect.centerY())
             }
 
             withContext(Dispatchers.Main) {
                 lastToast?.cancel()
-                lastToast = Toast.makeText(context, "Stops: ${discs.size}", Toast.LENGTH_SHORT)
+                lastToast = Toast.makeText(context, "Stops: ${result.passed.size}", Toast.LENGTH_SHORT)
                 lastToast?.show()
-                tapperService.showDebugMarkers(deviceCentroids, deviceBounds)
+                tapperService.showDebugMarkers(deviceRejectedCenters, deviceAllBounds)
             }
         } else {
             screenshot.recycle()
