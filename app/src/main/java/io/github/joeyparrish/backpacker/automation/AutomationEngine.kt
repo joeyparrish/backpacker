@@ -69,17 +69,22 @@ class AutomationEngine(
 
     private suspend fun scanLoop() {
         Log.d(TAG, "Scan loop: capturing screenshot")
+        val t0 = System.currentTimeMillis()
 
         val screenshot = screenshotService.capture() ?: run {
             Log.w(TAG, "Screenshot returned null — VirtualDisplay not ready?")
             delay(2_000)
             return
         }
+        val t1 = System.currentTimeMillis()
+        Log.d(TAG, "perf: capture=${t1 - t0}ms")
 
         val w = screenshot.width
         val h = screenshot.height
         val result = pokestopDetector.detect(screenshot)
         screenshot.recycle()
+        val t2 = System.currentTimeMillis()
+        Log.d(TAG, "perf: detect=${t2 - t1}ms  stops=${result.passed.size}")
 
         if (debugScan) {
             fun RectF.toDevice() = RectF(
@@ -106,13 +111,17 @@ class AutomationEngine(
                 Log.i(TAG, "Detected ${result.passed.size} Pokéstop(s), attempting spins")
                 for (disc in result.passed) {
                     if (!running || !coroutineContext.isActive) break
+                    val ts = System.currentTimeMillis()
                     spinDisc(disc, w, h)
+                    Log.d(TAG, "perf: spinDisc=${System.currentTimeMillis() - ts}ms")
                     tapperService.back()
                     delay(BACK_DELAY_MS)
                 }
             }
         }
 
+        val tDone = System.currentTimeMillis()
+        Log.d(TAG, "perf: scan active=${tDone - t0}ms  interval=${scanIntervalMs}ms")
         Log.d(TAG, "Sleeping ${scanIntervalMs / 1000}s before next scan")
         delay(scanIntervalMs)
     }
@@ -180,6 +189,7 @@ class AutomationEngine(
      */
     private suspend fun runSpinnerDebugCheck() {
         Log.d(TAG, "Spinner debug: capturing screenshot")
+        val t0 = System.currentTimeMillis()
         val screenshot = screenshotService.capture()
         if (screenshot == null) {
             Log.w(TAG, "Screenshot null during spinner debug")
@@ -190,11 +200,14 @@ class AutomationEngine(
             }
             return
         }
+        Log.d(TAG, "perf: capture=${System.currentTimeMillis() - t0}ms")
 
         val deviceWidth  = screenshot.width
         val deviceHeight = screenshot.height
+        val t1 = System.currentTimeMillis()
         val state = spinnerDetector.detectState(screenshot)
         screenshot.recycle()
+        Log.d(TAG, "perf: detectState=${System.currentTimeMillis() - t1}ms  result=$state")
 
         if (state == SpinnerDetector.SpinResult.CYAN) {
             Log.i(TAG, "Spinner: cyan — swiping")
