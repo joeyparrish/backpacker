@@ -2,6 +2,8 @@
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- On: light purple (purple_200) so track is visually distinct from the thumb -->
     <item android:state_checked="true" android:color="@color/purple_200" />
+    <!-- Disabled+unchecked: solid mid-grey, visible on both light and dark backgrounds -->
+    <item android:state_enabled="false" android:color="#FF888888" />
     <!-- Off: semi-transparent black, renders as grey on a light background -->
     <item android:color="#61000000" />
 </selector>
