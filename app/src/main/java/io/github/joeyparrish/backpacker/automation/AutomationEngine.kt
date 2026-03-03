@@ -27,7 +27,7 @@ class AutomationEngine(
     private val screenshotService: ScreenshotService,
     private val tapperService: TapperService,
     private val context: Context,
-    private val scanIntervalMs: Long = 60_000L
+    private val scanIntervalMs: Long
 ) {
     @Volatile private var running = true
 
@@ -226,7 +226,7 @@ class AutomationEngine(
         val elapsedHours = (System.currentTimeMillis() - sessionStartMs) / 3_600_000.0
         val spinsPerHour = sessionSpins / elapsedHours
 
-        Log.i(TAG, "Spin $succeededOrFailed (session total: $sessionSpins, %.1f/hr)".format(spinsPerHour))
+        Log.i(TAG, "Spin $succeededOrFailed (final state: $finalDiscState, session total: $sessionSpins, %.1f/hr)".format(spinsPerHour))
         withContext(Dispatchers.Main) {
             lastToast?.cancel()
             lastToast = Toast.makeText(

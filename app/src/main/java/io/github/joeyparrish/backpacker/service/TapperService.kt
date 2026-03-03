@@ -8,6 +8,7 @@ import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import io.github.joeyparrish.backpacker.ui.DebugOverlayView
 import io.github.joeyparrish.backpacker.ui.OverlayView
+import kotlinx.coroutines.delay
 
 /**
  * AccessibilityService that:
@@ -88,7 +89,7 @@ class TapperService : AccessibilityService() {
         dispatchGesture(GestureDescription.Builder().addStroke(stroke).build(), null, null)
     }
 
-    fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, durationMs: Long) {
+    suspend fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, durationMs: Long) {
         Log.d(TAG, "swipe($x1,$y1 → $x2,$y2, ${durationMs}ms)")
         val path = Path().apply {
             moveTo(x1, y1)
@@ -96,6 +97,9 @@ class TapperService : AccessibilityService() {
         }
         val stroke = GestureDescription.StrokeDescription(path, 0L, durationMs)
         dispatchGesture(GestureDescription.Builder().addStroke(stroke).build(), null, null)
+        // NOTE: The gesture time isn't actually waited on by the call to
+        // dispatch it.  So we delay explicitly here.
+        delay(durationMs)
     }
 
     fun back() {
