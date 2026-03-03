@@ -31,6 +31,9 @@ class AutomationEngine(
 
     private val pokestopDetector = PokestopDetector()
 
+    // Cancelled before each new toast so rapid scans don't queue up or get rate-limited.
+    private var lastToast: Toast? = null
+
     suspend fun run() {
         Log.i(TAG, "AutomationEngine starting")
         // Brief pause so any UI state changes (FAB icon, overlays) settle before first capture.
@@ -82,7 +85,9 @@ class AutomationEngine(
             }
 
             withContext(Dispatchers.Main) {
-                Toast.makeText(context, "Stops: ${discs.size}", Toast.LENGTH_SHORT).show()
+                lastToast?.cancel()
+                lastToast = Toast.makeText(context, "Stops: ${discs.size}", Toast.LENGTH_SHORT)
+                lastToast?.show()
                 tapperService.showDebugMarkers(deviceCentroids, deviceBounds)
             }
         } else {
