@@ -47,6 +47,12 @@ class MainActivity : AppCompatActivity() {
      */
     private var updatingOverlaySwitch = false
 
+    /**
+     * Guards against the debug switch listeners triggering each other when we
+     * programmatically clear one switch while enabling the other.
+     */
+    private var updatingDebugSwitches = false
+
     private val mpLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -91,8 +97,27 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.switchDebugScan.setOnCheckedChangeListener { _, checked ->
+            if (updatingDebugSwitches) return@setOnCheckedChangeListener
             AutomationEngine.debugScan = checked
-            OverlayView.skipCarMode = checked
+            if (checked) {
+                updatingDebugSwitches = true
+                binding.switchSpinnerDebug.isChecked = false
+                AutomationEngine.spinnerDebug = false
+                updatingDebugSwitches = false
+            }
+            OverlayView.skipCarMode = checked || binding.switchSpinnerDebug.isChecked
+        }
+
+        binding.switchSpinnerDebug.setOnCheckedChangeListener { _, checked ->
+            if (updatingDebugSwitches) return@setOnCheckedChangeListener
+            AutomationEngine.spinnerDebug = checked
+            if (checked) {
+                updatingDebugSwitches = true
+                binding.switchDebugScan.isChecked = false
+                AutomationEngine.debugScan = false
+                updatingDebugSwitches = false
+            }
+            OverlayView.skipCarMode = checked || binding.switchDebugScan.isChecked
         }
     }
 

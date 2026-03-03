@@ -16,6 +16,7 @@
     <string name="permission_battery_button">Disable Battery Optimization</string>
     <string name="overlay_label">Overlay enabled</string>
     <string name="debug_scan_label">Debug scan: show stop markers</string>
+    <string name="spinner_debug_label">Debug spinner: tap FAB to check circle colour</string>
     <string name="status_accessibility_ok">Gesture service: ENABLED</string>
     <string name="status_accessibility_missing">Gesture service: DISABLED</string>
 </resources>

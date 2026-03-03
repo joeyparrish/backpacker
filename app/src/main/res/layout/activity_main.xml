@@ -133,5 +133,14 @@
             app:thumbTint="@color/switch_thumb_tint"
             app:trackTint="@color/switch_track_tint" />
 
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switchSpinnerDebug"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/spinner_debug_label"
+            app:thumbTint="@color/switch_thumb_tint"
+            app:trackTint="@color/switch_track_tint" />
+
     </LinearLayout>
 </ScrollView>

@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.RectF
 import android.util.Log
 import android.widget.Toast
+import io.github.joeyparrish.backpacker.service.AutomationService
 import io.github.joeyparrish.backpacker.service.ScreenshotService
 import io.github.joeyparrish.backpacker.service.TapperService
 import io.github.joeyparrish.backpacker.util.CoordinateTransform
@@ -39,6 +40,15 @@ class AutomationEngine(
         Log.i(TAG, "AutomationEngine starting")
         // Brief pause so any UI state changes (FAB icon, overlays) settle before first capture.
         delay(500)
+
+        if (spinnerDebug) {
+            runSpinnerDebugCheck()
+            // Pause via the service so the FAB resets to IDLE and the notification updates.
+            // The Intent is processed after this coroutine returns, so there is no cancel race.
+            withContext(Dispatchers.Main) { AutomationService.pause(context) }
+            return
+        }
+
         while (running && coroutineContext.isActive) {
             try {
                 scanLoop()
@@ -147,11 +157,49 @@ class AutomationEngine(
         Log.w(TAG, "All $MAX_SPIN_ATTEMPTS spin attempts failed — moving on")
     }
 
+    /**
+     * One-shot spinner debug check. Captures a screenshot, runs [SpinnerDetector.detectState],
+     * and shows a toast reporting whether the circle is cyan, purple, or absent.
+     * Caller sends AutomationService.pause() afterward to reset FAB and service state.
+     */
+    private suspend fun runSpinnerDebugCheck() {
+        Log.d(TAG, "Spinner debug: capturing screenshot")
+        val screenshot = screenshotService.capture()
+        if (screenshot == null) {
+            Log.w(TAG, "Screenshot null during spinner debug")
+            withContext(Dispatchers.Main) {
+                lastToast?.cancel()
+                lastToast = Toast.makeText(context, "Spinner: no screenshot", Toast.LENGTH_LONG)
+                lastToast?.show()
+            }
+            return
+        }
+
+        val state = spinnerDetector.detectState(screenshot)
+        screenshot.recycle()
+
+        val message = when (state) {
+            SpinnerDetector.SpinResult.PURPLE -> "Spinner: purple"
+            SpinnerDetector.SpinResult.CYAN   -> "Spinner: cyan"
+            SpinnerDetector.SpinResult.ABSENT -> "Spinner: absent"
+        }
+        Log.i(TAG, message)
+
+        withContext(Dispatchers.Main) {
+            lastToast?.cancel()
+            lastToast = Toast.makeText(context, message, Toast.LENGTH_LONG)
+            lastToast?.show()
+        }
+    }
+
     companion object {
         private const val TAG = "Backpacker.AutomationEngine"
 
         /** When true, each scan runs PokestopDetector and shows debug overlays. */
         @Volatile var debugScan = false
+
+        /** When true, the next FAB activation takes one spinner screenshot and reports its state. */
+        @Volatile var spinnerDebug = false
 
         // Timing constants — all may need tuning per device.
         private const val OPEN_DELAY_MS       = 1_000L  // wait for detail view animation
