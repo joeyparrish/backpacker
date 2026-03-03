@@ -20,7 +20,7 @@ A sideloaded Android app (APK) that runs as a background service and automates s
 | Target SDK | API 34+ |
 | Screen capture | Android `MediaProjection` API |
 | Gesture injection | Android `AccessibilityService` (`dispatchGesture`) |
-| Computer vision | OpenCV for Android (via `iamareebjamal/opencv-android`) |
+| Computer vision | OpenCV for Android (`org.opencv:opencv:4.12.0` from Maven Central) |
 | Overlay UI | `TYPE_ACCESSIBILITY_OVERLAY` window via the AccessibilityService |
 | Background execution | `ForegroundService` with persistent notification |
 
@@ -107,16 +107,22 @@ All CV runs on captured `Bitmap`s converted to OpenCV `Mat` objects.
 
 After tapping a disc, the stop detail view opens. We immediately attempt to spin —
 no range check is performed. If the stop is slightly out of range, the spin will
-simply fail, which is handled by the retry loop exactly the same as a network failure.
+simply fail, which is handled identically to a network failure.
 
-**Spin success detection:** After the swipe gesture, one of two things appears:
-- Item reward bubbles floating up (items were received) — spin succeeded
-- The circle remains the same color with no items — spin failed (network or range)
+**Initial state check:** Before swiping, capture and call `SpinnerDetector.detectState()`:
+- ABSENT or null → tapped something wrong (map shifted, Pokémon collision, etc.); bail out without a back gesture
+- PURPLE → disc already spun; tap back and bail
+- CYAN → disc is ready; proceed with swipes
 
-Detect success by checking if the circle region has turned from its spinnable color
-(blue-ish) to the spun color (purple). Check the centre 50%×40% ROI for the
-spun HSV range (H=120–160, S=100–255, V=80–255); threshold >10% of pixels.
-Calibrate from screenshots.
+**Spin attempt:** Fire 10 rapid swipes across the circle centre. Multiple swipes cost almost
+nothing extra and improve robustness against GPS jitter and network latency.
+No inter-swipe checking needed.
+
+**Success detection:** After a short settle delay, call `detectState()` again.
+- success = `finalDiscState != null && finalDiscState != CYAN`
+- Rationale: the spin animation may briefly make the ring appear ABSENT before settling to
+  PURPLE. Anything that is no longer CYAN means we successfully triggered the spin.
+- Failure (still CYAN) → log and return false; the outer loop will retry promptly.
 
 ---
 
@@ -126,30 +132,32 @@ Calibrate from screenshots.
 START (toggle activated)
 │
 ├─ SCAN LOOP
+│   ├─ If screen off → sleep 5s → repeat
 │   ├─ Capture screenshot
 │   ├─ Run Pokéstop disc detection (HSV + contour)
-│   ├─ If no cyan discs found → sleep 60s → repeat SCAN LOOP
-│   └─ For each cyan disc centroid:
+│   ├─ If no cyan discs found → sleep scanInterval → repeat SCAN LOOP
+│   └─ If cyan discs found:
+│       ├─ Pick one disc at random
 │       │
 │       ├─ TAP disc centroid
-│       ├─ Wait 800–1200ms for detail view to open
+│       ├─ Wait 1s for detail view to open
 │       │
-│       ├─ SPIN ATTEMPT LOOP (max 3 attempts, 2s delay between)
-│       │   ├─ Perform horizontal swipe across circle center
-│       │   ├─ Wait 1500ms for network response
-│       │   ├─ Capture screenshot
-│       │   ├─ Check for spin success (purple colour change)
-│       │   ├─ If success → break out of spin loop
-│       │   └─ If failed and attempts remain → retry
-│       │       (range failures and network failures are treated identically)
+│       ├─ checkDiscState() — initial check
+│       │   ├─ ABSENT or null → "wrong spot", return false (no back gesture)
+│       │   ├─ PURPLE → "already spun", back(), return false
+│       │   └─ CYAN → proceed
 │       │
-│       ├─ If all attempts exhausted → log failure, continue
+│       ├─ Fire 10 sequential swipes (~300ms each, swipe() is suspend)
+│       ├─ Wait 500ms for spin animation to settle
 │       │
-│       ├─ BACK gesture (AccessibilityService global action)
-│       ├─ Wait 600ms for map to restore
-│       └─ Continue to next disc
+│       ├─ checkDiscState() — final check
+│       │   ├─ not CYAN (or null) → success; back(), sessionSpins++
+│       │   └─ still CYAN → failure; back()
+│       │
+│       ├─ If failure OR multiple discs remain → thisLoopDelay = 500ms
+│       └─ Else → thisLoopDelay = scanInterval (60s HOUSE / 5s CAR)
 │
-└─ After all discs processed → sleep 60s → repeat SCAN LOOP
+└─ sleep thisLoopDelay → repeat SCAN LOOP
 ```
 
 ---
@@ -199,8 +207,7 @@ app/
 │   │   │   ├── MainActivity.kt             # Onboarding: guide user through permissions
 │   │   │   └── OverlayView.kt              # Floating toggle button
 │   │   └── util/
-│   │       ├── CoordinateTransform.kt       # Normalize 720p ↔ device pixels
-│   │       └── BitmapUtils.kt              # Bitmap → Mat conversions
+│   │       └── CoordinateTransform.kt       # Normalize 720p ↔ device pixels
 │   └── res/
 │       └── xml/
 │           └── tapper_service.xml          # AccessibilityService config
