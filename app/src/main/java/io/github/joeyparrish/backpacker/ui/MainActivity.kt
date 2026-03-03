@@ -156,7 +156,18 @@ class MainActivity : AppCompatActivity() {
     private fun disableOverlay() {
         TapperService.instance?.hideOverlay()
         AutomationService.stop(this)
+        resetDebugFlags()
         updateOverlaySwitch()
+    }
+
+    private fun resetDebugFlags() {
+        updatingDebugSwitches = true
+        binding.switchDebugScan.isChecked = false
+        binding.switchSpinnerDebug.isChecked = false
+        updatingDebugSwitches = false
+        AutomationEngine.debugScan = false
+        AutomationEngine.debugSpinner = false
+        OverlayView.skipCarMode = false
     }
 
     // -------------------------------------------------------------------------
