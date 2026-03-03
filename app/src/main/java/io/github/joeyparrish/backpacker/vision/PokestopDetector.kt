@@ -21,10 +21,10 @@ import org.opencv.imgproc.Imgproc
  *   1. Convert RGBA → HSV
  *   2. Threshold with a cyan HSV mask
  *   3. Morphological close to fill gaps
- *   4. Find contours; filter by bounding-box HEIGHT only (width varies with disc rotation)
+ *   4. Find contours; filter by bounding-box height and area (width varies with disc rotation)
  *   5. Return centroids sorted by distance from screen centre
  *
- * All threshold constants are initial guesses — calibrate against real screenshots.
+ * All threshold constants are initial guesses
  */
 class PokestopDetector {
 
