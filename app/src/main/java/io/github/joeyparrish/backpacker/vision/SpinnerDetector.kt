@@ -1,8 +1,6 @@
 package io.github.joeyparrish.backpacker.vision
 
-import android.graphics.Bitmap
 import android.util.Log
-import io.github.joeyparrish.backpacker.util.BitmapUtils
 import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
@@ -24,6 +22,9 @@ import org.opencv.imgproc.Imgproc
  *   4. Build an annular mask and AND it against purple / cyan colour masks.
  *   5. Report the colour whose ring-pixel fraction exceeds RING_DETECT_THRESHOLD.
  *
+ * The [Mat] passed to [detectState] must be in RGBA format at 720p (as produced by
+ * ScreenshotService). The caller retains ownership and must call [Mat.release] after use.
+ *
  * Measured on a 684px-wide device (normalised to 720px):
  *   outer radius ≈ 43.9% of width, inner/outer ≈ 90%.
  */
@@ -43,13 +44,13 @@ class SpinnerDetector {
     /**
      * Detect the state of the spinner ring.
      * Returns [SpinResult.PURPLE] if spun, [SpinResult.CYAN] if ready, [SpinResult.ABSENT] otherwise.
+     * The caller retains ownership of [screenshot].
      */
-    fun detectState(screenshot: Bitmap): SpinResult {
-        val scaled = BitmapUtils.scaleTo720p(screenshot)
-        val w = scaled.width   // always 720 after normalisation
-        val h = scaled.height  // varies by device aspect ratio
+    fun detectState(screenshot: Mat): SpinResult {
+        val w = screenshot.cols()
+        val h = screenshot.rows()
 
-        val rgba      = BitmapUtils.bitmapToMat(scaled)
+        // screenshot is already at 720p RGBA — no scaling needed.
         val hsv       = Mat()
         val gray      = Mat()
         val circles   = Mat()
@@ -59,11 +60,11 @@ class SpinnerDetector {
 
         return try {
             // HSV for colour detection
-            Imgproc.cvtColor(rgba, hsv, Imgproc.COLOR_RGBA2RGB)
+            Imgproc.cvtColor(screenshot, hsv, Imgproc.COLOR_RGBA2RGB)
             Imgproc.cvtColor(hsv,  hsv, Imgproc.COLOR_RGB2HSV)
 
             // Greyscale for Hough circle detection
-            Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
+            Imgproc.cvtColor(screenshot, gray, Imgproc.COLOR_RGBA2GRAY)
             Imgproc.GaussianBlur(gray, gray, Size(9.0, 9.0), 2.0)
 
             Imgproc.HoughCircles(
@@ -122,7 +123,7 @@ class SpinnerDetector {
 
             SpinResult.ABSENT
         } finally {
-            rgba.release()
+            // Do not release screenshot — owned by caller.
             hsv.release()
             gray.release()
             circles.release()
@@ -133,7 +134,7 @@ class SpinnerDetector {
     }
 
     /** Returns true if the spinner ring appears to have turned purple (spin succeeded). */
-    fun isSpinSuccess(screenshot: Bitmap): Boolean =
+    fun isSpinSuccess(screenshot: Mat): Boolean =
         detectState(screenshot) == SpinResult.PURPLE
 
     companion object {

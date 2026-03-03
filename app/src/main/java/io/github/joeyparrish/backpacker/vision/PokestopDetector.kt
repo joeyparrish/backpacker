@@ -1,10 +1,8 @@
 package io.github.joeyparrish.backpacker.vision
 
-import android.graphics.Bitmap
 import android.graphics.PointF
 import android.graphics.RectF
 import android.util.Log
-import io.github.joeyparrish.backpacker.util.BitmapUtils
 import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
@@ -24,7 +22,8 @@ import org.opencv.imgproc.Imgproc
  *   4. Find contours; filter by bounding-box height and area (width varies with disc rotation)
  *   5. Return centroids sorted by distance from screen centre
  *
- * All threshold constants are initial guesses
+ * The [Mat] passed to [detect] must be in RGBA format at 720p (as produced by ScreenshotService).
+ * The caller retains ownership and must call [Mat.release] after [detect] returns.
  */
 class PokestopDetector {
 
@@ -35,7 +34,7 @@ class PokestopDetector {
     // NOTE: Having a wider color range can result in more pixels being
     // included in a blob, which can result in a greater height or area
     // observed.
-    private val hsvLower = Scalar(85.0, 155.0, 225.0)
+    private val hsvLower = Scalar( 85.0, 155.0, 225.0)
     private val hsvUpper = Scalar(105.0, 255.0, 255.0)
 
     // Min/max bounding-box height (720p px) for a valid disc contour.
@@ -64,22 +63,22 @@ class PokestopDetector {
     )
 
     /**
-     * Detect Pokéstop discs in [screenshot].
+     * Detect Pokéstop discs in [screenshot] (720p RGBA Mat from ScreenshotService).
      * Returns a [DetectionResult] with passing detections and all/rejected bounding boxes
      * (both in 720p-normalised space) for debug overlay rendering.
+     * The caller retains ownership of [screenshot].
      */
-    fun detect(screenshot: Bitmap): DetectionResult {
-        val scaled = BitmapUtils.scaleTo720p(screenshot)
-        val normWidth = scaled.width
-        val normHeight = scaled.height
+    fun detect(screenshot: Mat): DetectionResult {
+        val normWidth  = screenshot.cols()
+        val normHeight = screenshot.rows()
 
-        val rgba = BitmapUtils.bitmapToMat(scaled)
-        val hsv = Mat()
-        val mask = Mat()
+        // screenshot is already at 720p RGBA — no scaling needed.
+        val hsv     = Mat()
+        val mask    = Mat()
         val morphed = Mat()
 
         try {
-            Imgproc.cvtColor(rgba, hsv, Imgproc.COLOR_RGBA2RGB)
+            Imgproc.cvtColor(screenshot, hsv, Imgproc.COLOR_RGBA2RGB)
             Imgproc.cvtColor(hsv, hsv, Imgproc.COLOR_RGB2HSV)
             Core.inRange(hsv, hsvLower, hsvUpper, mask)
 
@@ -158,7 +157,7 @@ class PokestopDetector {
             return DetectionResult(detections, allBounds, rejectedBounds)
 
         } finally {
-            rgba.release()
+            // Do not release screenshot — owned by caller.
             hsv.release()
             mask.release()
             morphed.release()

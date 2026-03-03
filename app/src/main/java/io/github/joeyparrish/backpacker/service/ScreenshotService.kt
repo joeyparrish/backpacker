@@ -10,10 +10,20 @@ import android.media.projection.MediaProjection
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Display
+import io.github.joeyparrish.backpacker.util.CoordinateTransform
+import org.opencv.android.Utils
+import org.opencv.core.Mat
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Wraps the Android MediaProjection API to provide on-demand screen captures.
+ *
+ * The VirtualDisplay is created at [CoordinateTransform.NORM_WIDTH] (720) pixels wide so the GPU
+ * composites into a smaller surface, reducing GPU work and eliminating any software downscaling.
+ * [capture] returns a 720p RGBA [Mat] directly; callers do not need to scale or convert.
+ *
+ * [deviceWidth] / [deviceHeight] expose the native device resolution, which callers need for
+ * gesture coordinate scaling (swipe/tap positions must be in device pixels, not 720p pixels).
  *
  * Android 14 (API 34) requirements:
  *   • A [MediaProjection.Callback] MUST be registered before calling createVirtualDisplay();
@@ -22,7 +32,6 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * @param onProjectionStop  Called (on the main thread) when the system revokes the
  *                          MediaProjection (e.g. the user dismisses the cast tile).
- *                          AutomationService uses this to stop itself cleanly.
  */
 class ScreenshotService(
     context: Context,
@@ -32,9 +41,14 @@ class ScreenshotService(
     /** True once the system stops the MediaProjection from outside the app. */
     private val projectionStopped = AtomicBoolean(false)
 
-    private val displayWidth: Int
-    private val displayHeight: Int
-    private val displayDpi: Int
+    /** Native device pixel dimensions — used by callers for gesture coordinate scaling. */
+    val deviceWidth:  Int
+    val deviceHeight: Int
+    private val deviceDpi: Int
+
+    /** Capture dimensions — always [CoordinateTransform.NORM_WIDTH] wide (720 px). */
+    private val captureWidth:  Int
+    private val captureHeight: Int
 
     private val imageReader: ImageReader
     private val virtualDisplay: VirtualDisplay
@@ -48,12 +62,19 @@ class ScreenshotService(
         val metrics = DisplayMetrics()
         @Suppress("DEPRECATION")
         display.getRealMetrics(metrics)
-        displayWidth = metrics.widthPixels
-        displayHeight = metrics.heightPixels
-        displayDpi = metrics.densityDpi
+        deviceWidth  = metrics.widthPixels
+        deviceHeight = metrics.heightPixels
+        deviceDpi    = metrics.densityDpi
+
+        // Create the VirtualDisplay at 720p so the GPU composites into a smaller surface and
+        // capture() can return a Mat at the correct resolution without any software scaling.
+        val scale     = CoordinateTransform.NORM_WIDTH.toFloat() / deviceWidth
+        captureWidth  = CoordinateTransform.NORM_WIDTH          // always 720
+        captureHeight = (deviceHeight * scale).toInt()
+        val captureDpi = (deviceDpi * scale).toInt()
 
         imageReader = ImageReader.newInstance(
-            displayWidth, displayHeight,
+            captureWidth, captureHeight,
             PixelFormat.RGBA_8888,
             /* maxImages = */ 2
         )
@@ -74,21 +95,22 @@ class ScreenshotService(
         // cause a SecurityException; it is not needed for plain screenshot capture.
         virtualDisplay = mediaProjection.createVirtualDisplay(
             "BackpackerCapture",
-            displayWidth, displayHeight, displayDpi,
+            captureWidth, captureHeight, captureDpi,
             0,
             imageReader.surface,
             null, null
         )
 
-        Log.d(TAG, "VirtualDisplay created: ${displayWidth}x${displayHeight} @ ${displayDpi}dpi")
+        Log.d(TAG, "VirtualDisplay: ${captureWidth}x${captureHeight} @ ${captureDpi}dpi " +
+                   "(device: ${deviceWidth}x${deviceHeight} @ ${deviceDpi}dpi)")
     }
 
     /**
-     * Capture the current screen as a Bitmap (ARGB_8888).
+     * Capture the current screen as a 720p RGBA [Mat].
      * Returns null if no image is available yet.
-     * The caller owns the returned Bitmap and should recycle it when done.
+     * The caller owns the returned Mat and must call [Mat.release] when done.
      */
-    fun capture(): Bitmap? {
+    fun capture(): Mat? {
         if (projectionStopped.get()) return null
         val image = imageReader.acquireLatestImage() ?: return null
 
@@ -96,18 +118,27 @@ class ScreenshotService(
             val plane = image.planes[0]
             val buffer = plane.buffer
             val pixelStride = plane.pixelStride
-            val rowStride = plane.rowStride
-            val rowPadding = rowStride - pixelStride * displayWidth
+            val rowStride   = plane.rowStride
+            val rowPadding  = rowStride - pixelStride * captureWidth
 
-            val paddedWidth = displayWidth + rowPadding / pixelStride
-            val raw = Bitmap.createBitmap(paddedWidth, displayHeight, Bitmap.Config.ARGB_8888)
+            // Use a Bitmap as an intermediary so Utils.bitmapToMat() handles the exact
+            // pixel-format conversion the CV pipeline expects (same path that was already
+            // confirmed correct during calibration).
+            val paddedWidth = captureWidth + rowPadding / pixelStride
+            val raw = Bitmap.createBitmap(paddedWidth, captureHeight, Bitmap.Config.ARGB_8888)
             raw.copyPixelsFromBuffer(buffer)
 
-            if (paddedWidth > displayWidth) {
-                Bitmap.createBitmap(raw, 0, 0, displayWidth, displayHeight).also { raw.recycle() }
+            val bmp = if (paddedWidth > captureWidth) {
+                Bitmap.createBitmap(raw, 0, 0, captureWidth, captureHeight)
+                    .also { raw.recycle() }
             } else {
                 raw
             }
+
+            val mat = Mat()
+            Utils.bitmapToMat(bmp, mat)
+            bmp.recycle()
+            mat
         } finally {
             image.close()
         }
@@ -115,13 +146,10 @@ class ScreenshotService(
 
     fun release() {
         try { virtualDisplay.release() } catch (e: Exception) { Log.w(TAG, "VD release: $e") }
-        try { imageReader.close() } catch (e: Exception) { Log.w(TAG, "IR close: $e") }
-        try { mediaProjection.stop() } catch (e: Exception) { Log.w(TAG, "MP stop: $e") }
+        try { imageReader.close()      } catch (e: Exception) { Log.w(TAG, "IR close: $e") }
+        try { mediaProjection.stop()   } catch (e: Exception) { Log.w(TAG, "MP stop: $e") }
         Log.d(TAG, "ScreenshotService released")
     }
-
-    val screenWidth: Int get() = displayWidth
-    val screenHeight: Int get() = displayHeight
 
     companion object {
         private const val TAG = "Backpacker.ScreenshotService"

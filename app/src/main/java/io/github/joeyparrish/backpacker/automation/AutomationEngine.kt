@@ -79,10 +79,10 @@ class AutomationEngine(
         val t1 = System.currentTimeMillis()
         Log.d(TAG, "perf: capture=${t1 - t0}ms")
 
-        val w = screenshot.width
-        val h = screenshot.height
+        val w = screenshotService.deviceWidth
+        val h = screenshotService.deviceHeight
         val result = pokestopDetector.detect(screenshot)
-        screenshot.recycle()
+        screenshot.release()
         val t2 = System.currentTimeMillis()
         Log.d(TAG, "perf: detect=${t2 - t1}ms  stops=${result.passed.size}")
 
@@ -156,7 +156,7 @@ class AutomationEngine(
                 return
             }
             val success = spinnerDetector.isSpinSuccess(check)
-            check.recycle()
+            check.release()
 
             if (success) {
                 sessionSpins++
@@ -202,11 +202,11 @@ class AutomationEngine(
         }
         Log.d(TAG, "perf: capture=${System.currentTimeMillis() - t0}ms")
 
-        val deviceWidth  = screenshot.width
-        val deviceHeight = screenshot.height
+        val deviceWidth  = screenshotService.deviceWidth
+        val deviceHeight = screenshotService.deviceHeight
         val t1 = System.currentTimeMillis()
         val state = spinnerDetector.detectState(screenshot)
-        screenshot.recycle()
+        screenshot.release()
         Log.d(TAG, "perf: detectState=${System.currentTimeMillis() - t1}ms  result=$state")
 
         if (state == SpinnerDetector.SpinResult.CYAN) {
@@ -225,7 +225,7 @@ class AutomationEngine(
 
             val check = screenshotService.capture()
             val afterState = if (check != null) {
-                spinnerDetector.detectState(check).also { check.recycle() }
+                spinnerDetector.detectState(check).also { check.release() }
             } else {
                 null
             }
