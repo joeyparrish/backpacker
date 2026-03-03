@@ -36,9 +36,9 @@ class SpinnerDetector {
     private val spunHsvLower = Scalar(120.0, 100.0,  80.0)
     private val spunHsvUpper = Scalar(160.0, 255.0, 255.0)
 
-    /** HSV bounds for the ready-to-spin (cyan/blue) colour. */
-    private val cyanHsvLower = Scalar( 85.0, 155.0, 225.0)
-    private val cyanHsvUpper = Scalar(105.0, 255.0, 255.0)
+    /** HSV bounds for the ready-to-spin (cyan/blue) colour. Uncalibrated. */
+    private val cyanHsvLower = Scalar( 85.0, 100.0, 100.0)
+    private val cyanHsvUpper = Scalar(130.0, 255.0, 255.0)
 
     /**
      * Detect the state of the spinner ring.
