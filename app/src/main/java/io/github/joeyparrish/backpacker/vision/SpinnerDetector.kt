@@ -17,12 +17,12 @@ import org.opencv.imgproc.Imgproc
  */
 class SpinnerDetector {
 
-    /** HSV bounds for the "spun" (purple/grey) colour after a successful spin. */
-    private val spunHsvLower = Scalar(120.0, 50.0, 80.0)
+    /** HSV bounds for the spun (purple) colour after a successful spin. Uncalibrated. */
+    private val spunHsvLower = Scalar(120.0, 100.0, 80.0)
     private val spunHsvUpper = Scalar(160.0, 255.0, 255.0)
 
     /**
-     * Check for spin success by looking for the "spun" purple/grey colour in the
+     * Check for spin success by looking for the spun (purple) colour in the
      * centre region of the screen.
      */
     fun isSpinSuccess(screenshot: Bitmap): Boolean {

@@ -114,8 +114,8 @@ simply fail, which is handled by the retry loop exactly the same as a network fa
 - The circle remains the same color with no items — spin failed (network or range)
 
 Detect success by checking if the circle region has turned from its spinnable color
-(blue-ish) to a "spun" color (purple/grey). Check the centre 50%×40% ROI for the
-spun HSV range (H=120–160, S=50–255, V=80–255); threshold >10% of pixels.
+(blue-ish) to the spun color (purple). Check the centre 50%×40% ROI for the
+spun HSV range (H=120–160, S=100–255, V=80–255); threshold >10% of pixels.
 Calibrate from screenshots.
 
 ---
@@ -138,7 +138,7 @@ START (toggle activated)
 │       │   ├─ Perform horizontal swipe across circle center
 │       │   ├─ Wait 1500ms for network response
 │       │   ├─ Capture screenshot
-│       │   ├─ Check for spin success (purple/grey colour change)
+│       │   ├─ Check for spin success (purple colour change)
 │       │   ├─ If success → break out of spin loop
 │       │   └─ If failed and attempts remain → retry
 │       │       (range failures and network failures are treated identically)
