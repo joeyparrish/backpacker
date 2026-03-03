@@ -37,6 +37,7 @@ class AutomationEngine(
     private var lastToast: Toast? = null
 
     private var sessionSpins = 0
+    private val sessionStartMs = System.currentTimeMillis()
 
     suspend fun run() {
         Log.i(TAG, "AutomationEngine starting")
@@ -150,10 +151,16 @@ class AutomationEngine(
 
             if (success) {
                 sessionSpins++
-                Log.i(TAG, "Spin succeeded on attempt $attempt (session total: $sessionSpins)")
+                val elapsedHours = (System.currentTimeMillis() - sessionStartMs) / 3_600_000.0
+                val spinsPerHour = sessionSpins / elapsedHours
+                Log.i(TAG, "Spin succeeded on attempt $attempt (session total: $sessionSpins, %.1f/hr)".format(spinsPerHour))
                 withContext(Dispatchers.Main) {
                     lastToast?.cancel()
-                    lastToast = Toast.makeText(context, "Spins: $sessionSpins", Toast.LENGTH_SHORT)
+                    lastToast = Toast.makeText(
+                        context,
+                        "Spins: $sessionSpins (%.1f/hr)".format(spinsPerHour),
+                        Toast.LENGTH_SHORT
+                    )
                     lastToast?.show()
                 }
                 return
