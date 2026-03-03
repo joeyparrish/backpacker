@@ -102,7 +102,7 @@ class MainActivity : AppCompatActivity() {
             if (checked) {
                 updatingDebugSwitches = true
                 binding.switchSpinnerDebug.isChecked = false
-                AutomationEngine.spinnerDebug = false
+                AutomationEngine.debugSpinner = false
                 updatingDebugSwitches = false
             }
             OverlayView.skipCarMode = checked || binding.switchSpinnerDebug.isChecked
@@ -110,7 +110,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.switchSpinnerDebug.setOnCheckedChangeListener { _, checked ->
             if (updatingDebugSwitches) return@setOnCheckedChangeListener
-            AutomationEngine.spinnerDebug = checked
+            AutomationEngine.debugSpinner = checked
             if (checked) {
                 updatingDebugSwitches = true
                 binding.switchDebugScan.isChecked = false

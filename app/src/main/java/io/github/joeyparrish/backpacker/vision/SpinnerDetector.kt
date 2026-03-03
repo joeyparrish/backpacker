@@ -138,10 +138,6 @@ class SpinnerDetector {
         return SpinResult.ABSENT
     }
 
-    /** Returns true if the spinner ring appears to have turned purple (spin succeeded). */
-    fun isSpinSuccess(screenshot: Mat): Boolean =
-        detectState(screenshot) == SpinResult.PURPLE
-
     /** Release all pre-allocated Mats. Call when the detector is no longer needed. */
     fun release() {
         hsv.release()

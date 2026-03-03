@@ -46,7 +46,7 @@ class AutomationEngine(
         // Brief pause so any UI state changes (FAB icon, overlays) settle before first capture.
         delay(500)
 
-        if (spinnerDebug) {
+        if (debugSpinner) {
             runSpinnerDebugCheck()
             // Pause via the service so the FAB resets to IDLE and the notification updates.
             // The Intent is processed after this coroutine returns, so there is no cancel race.
@@ -102,6 +102,10 @@ class AutomationEngine(
         val t2 = System.currentTimeMillis()
         Log.d(TAG, "perf: detect=${t2 - t1}ms  stops=${result.passed.size}")
 
+        // Initially whatever the scan mode dictates, but can be overridden by
+        // circumstances later.  (Multiple stops, failures, etc)
+        var thisLoopDelayMs = scanIntervalMs
+
         if (debugScan) {
             fun RectF.toDevice() = RectF(
                 CoordinateTransform.toDeviceX(left, w),
@@ -125,76 +129,118 @@ class AutomationEngine(
                 Log.i(TAG, "No Pokéstops detected")
             } else {
                 Log.i(TAG, "Detected ${result.passed.size} Pokéstop(s), attempting spins")
-                for (disc in result.passed) {
-                    if (!running || !coroutineContext.isActive) break
+                if (result.passed.size > 0) {
+                    // Pick one disc at random.
+                    val disc = result.passed.random()
                     val ts = System.currentTimeMillis()
-                    spinDisc(disc, w, h)
+                    val success = spinDisc(disc, w, h)
                     Log.d(TAG, "perf: spinDisc=${System.currentTimeMillis() - ts}ms")
-                    tapperService.back()
-                    delay(BACK_DELAY_MS)
+
+                    // If we fail, or if there are multiple discs, scan again
+                    // immediately.
+                    if (!success || result.passed.size > 1) {
+                        thisLoopDelayMs = SCAN_IMMEDIATELY_MS
+                    }
                 }
             }
         }
 
         val tDone = System.currentTimeMillis()
         Log.d(TAG, "perf: scan active=${tDone - t0}ms  interval=${scanIntervalMs}ms")
-        Log.d(TAG, "Sleeping ${scanIntervalMs / 1000}s before next scan")
-        delay(scanIntervalMs)
+        Log.d(TAG, "Sleeping ${thisLoopDelayMs / 1000}s before next scan")
+        delay(thisLoopDelayMs)
+    }
+
+    private suspend fun checkDiscState(): SpinnerDetector.SpinResult? {
+        val check = screenshotService.capture()
+        val state = if (check != null) {
+            spinnerDetector.detectState(check).also { check.release() }
+        } else {
+            null
+        }
+        return state
     }
 
     /**
-     * Tap a detected disc, wait for the detail view to open, then attempt to spin
-     * up to [MAX_SPIN_ATTEMPTS] times. Both range failures and network failures are
-     * handled identically — if the spin doesn't register we just retry.
+     * Tap a detected disc, then attempt to spin.  Attempts to return to the
+     * map in all cases.
      *
-     * Caller is responsible for navigating back to the map afterward.
+     * Returns true on success.
      */
-    private suspend fun spinDisc(disc: PokestopDetector.Disc, deviceWidth: Int, deviceHeight: Int) {
+    private suspend fun spinDisc(disc: PokestopDetector.Disc, deviceWidth: Int, deviceHeight: Int): Boolean {
         val tapX = CoordinateTransform.toDeviceX(disc.centroid.x, deviceWidth)
         val tapY = CoordinateTransform.toDeviceY(disc.centroid.y, deviceWidth)
         Log.d(TAG, "Tapping disc at device (%.1f, %.1f)".format(tapX, tapY))
         tapperService.tap(tapX, tapY)
         delay(OPEN_DELAY_MS)
 
-        // Swipe horizontally across the centre of the screen to spin the circle.
+        // Make sure the map didn't shift under us and that we didn't collide
+        // with a Pokemon or notification of some kind.
+        val initialDiscState = checkDiscState()
+        if (initialDiscState == SpinnerDetector.SpinResult.ABSENT ||
+            initialDiscState == null) {
+            Log.w(TAG, "Wrong spot tapped - scan again")
+
+            // FIXME: How we back out from this state depends on other elements
+            // on screen.  If we tapped a stop (X in bottom center), we need to
+            // tap the X.  If we are still in the map (pokeball in bottom
+            // center), we need to do nothing.  If we are in some other state,
+            // like we tapped a Pokemon, we need to gesture "back".
+
+            return false
+        } else if (initialDiscState == SpinnerDetector.SpinResult.PURPLE) {
+            Log.w(TAG, "Disc not ready - scan again")
+
+            // FIXME: Tap the "X" instead
+            tapperService.back()
+
+            return false
+        }
+
+        // Swipe horizontally across the centre of the screen to spin the
+        // circle.  Do it several time rapidly.  This fires off several network
+        // requests and deals with little GPS issues while driving, at very
+        // little cost.  No need to verify each spin and retry.  And extra
+        // spins after success will just settle the animation more quickly so
+        // the detector can run better afterwards.
         val swipeY  = deviceHeight * 0.5f
         val swipeX1 = deviceWidth  * 0.25f
         val swipeX2 = deviceWidth  * 0.75f
-
-        for (attempt in 1..MAX_SPIN_ATTEMPTS) {
-            Log.d(TAG, "Spin attempt $attempt/$MAX_SPIN_ATTEMPTS")
+        for (attempt in 1..NUM_SPIN_ATTEMPTS) {
             tapperService.swipe(swipeX1, swipeY, swipeX2, swipeY, SWIPE_DURATION_MS)
-            delay(SPIN_RESULT_DELAY_MS)
+        }
+        delay(SPIN_RESULT_DELAY_MS)
 
-            val check = screenshotService.capture()
-            if (check == null) {
-                Log.w(TAG, "Screenshot null during spin check — aborting disc")
-                return
-            }
-            val success = spinnerDetector.isSpinSuccess(check)
-            check.release()
+        // We know coming into the spin loop above that we were once looking at
+        // cyan.  A failure to detect cyan might be because the spin animation
+        // is still going, in which case we may also fail to detect purple.  So
+        // success isn't purple, it's anything that isn't cyan.
+        val finalDiscState = checkDiscState()
+        val success = finalDiscState != null && finalDiscState != SpinnerDetector.SpinResult.CYAN
 
-            if (success) {
-                sessionSpins++
-                val elapsedHours = (System.currentTimeMillis() - sessionStartMs) / 3_600_000.0
-                val spinsPerHour = sessionSpins / elapsedHours
-                Log.i(TAG, "Spin succeeded on attempt $attempt (session total: $sessionSpins, %.1f/hr)".format(spinsPerHour))
-                withContext(Dispatchers.Main) {
-                    lastToast?.cancel()
-                    lastToast = Toast.makeText(
-                        context,
-                        "Spins: $sessionSpins (%.1f/hr)".format(spinsPerHour),
-                        Toast.LENGTH_SHORT
-                    )
-                    lastToast?.show()
-                }
-                return
-            }
-            Log.d(TAG, "Spin attempt $attempt failed (range or network)")
-            if (attempt < MAX_SPIN_ATTEMPTS) delay(RETRY_DELAY_MS)
+        val succeededOrFailed = if (success) "succeeded" else "failed"
+        if (success) {
+            sessionSpins++
         }
 
-        Log.w(TAG, "All $MAX_SPIN_ATTEMPTS spin attempts failed — moving on")
+        val elapsedHours = (System.currentTimeMillis() - sessionStartMs) / 3_600_000.0
+        val spinsPerHour = sessionSpins / elapsedHours
+
+        Log.i(TAG, "Spin $succeededOrFailed (session total: $sessionSpins, %.1f/hr)".format(spinsPerHour))
+        withContext(Dispatchers.Main) {
+            lastToast?.cancel()
+            lastToast = Toast.makeText(
+                context,
+                "Spin $succeededOrFailed. $sessionSpins spins (%.1f/hr)".format(spinsPerHour),
+                Toast.LENGTH_SHORT
+            )
+            lastToast?.show()
+        }
+
+        // FIXME: Tap the "X" instead
+        tapperService.back()
+
+        return success
     }
 
     /**
@@ -205,27 +251,9 @@ class AutomationEngine(
      */
     private suspend fun runSpinnerDebugCheck() {
         Log.d(TAG, "Spinner debug: capturing screenshot")
-        val t0 = System.currentTimeMillis()
-        val screenshot = screenshotService.capture()
-        if (screenshot == null) {
-            Log.w(TAG, "Screenshot null during spinner debug")
-            withContext(Dispatchers.Main) {
-                lastToast?.cancel()
-                lastToast = Toast.makeText(context, "Spinner: no screenshot", Toast.LENGTH_LONG)
-                lastToast?.show()
-            }
-            return
-        }
-        Log.d(TAG, "perf: capture=${System.currentTimeMillis() - t0}ms")
+        val beforeState = checkDiscState()
 
-        val deviceWidth  = screenshotService.deviceWidth
-        val deviceHeight = screenshotService.deviceHeight
-        val t1 = System.currentTimeMillis()
-        val state = spinnerDetector.detectState(screenshot)
-        screenshot.release()
-        Log.d(TAG, "perf: detectState=${System.currentTimeMillis() - t1}ms  result=$state")
-
-        if (state == SpinnerDetector.SpinResult.CYAN) {
+        if (beforeState == SpinnerDetector.SpinResult.CYAN) {
             Log.i(TAG, "Spinner: cyan — swiping")
             withContext(Dispatchers.Main) {
                 lastToast?.cancel()
@@ -233,19 +261,13 @@ class AutomationEngine(
                 lastToast?.show()
             }
 
-            val swipeY  = deviceHeight * 0.5f
-            val swipeX1 = deviceWidth  * 0.25f
-            val swipeX2 = deviceWidth  * 0.75f
+            val swipeY  = screenshotService.deviceHeight * 0.5f
+            val swipeX1 = screenshotService.deviceWidth  * 0.25f
+            val swipeX2 = screenshotService.deviceWidth  * 0.75f
             tapperService.swipe(swipeX1, swipeY, swipeX2, swipeY, SWIPE_DURATION_MS)
             delay(SPIN_RESULT_DELAY_MS)
 
-            val check = screenshotService.capture()
-            val afterState = if (check != null) {
-                spinnerDetector.detectState(check).also { check.release() }
-            } else {
-                null
-            }
-
+            val afterState = checkDiscState()
             val message = when (afterState) {
                 SpinnerDetector.SpinResult.PURPLE -> "Spinner: purple (success!)"
                 SpinnerDetector.SpinResult.CYAN   -> "Spinner: still cyan (failed)"
@@ -261,10 +283,11 @@ class AutomationEngine(
             return
         }
 
-        val message = when (state) {
+        val message = when (beforeState) {
             SpinnerDetector.SpinResult.PURPLE -> "Spinner: purple"
             SpinnerDetector.SpinResult.CYAN   -> "Spinner: cyan"  // unreachable
             SpinnerDetector.SpinResult.ABSENT -> "Spinner: absent"
+            null                              -> "Screenshot failed"
         }
         Log.i(TAG, message)
 
@@ -282,18 +305,17 @@ class AutomationEngine(
         @Volatile var debugScan = false
 
         /** When true, the next FAB activation takes one spinner screenshot and reports its state. */
-        @Volatile var spinnerDebug = false
+        @Volatile var debugSpinner = false
 
         // Poll interval when the screen is off — short enough to resume promptly,
         // long enough not to spin the CPU while the display is dark.
-        private const val SCREEN_OFF_POLL_MS  = 5_000L
+        private const val SCREEN_OFF_POLL_MS   = 5_000L
 
-        // Timing constants — all may need tuning per device.
-        private const val OPEN_DELAY_MS       = 1_000L  // wait for detail view animation
-        private const val SWIPE_DURATION_MS   =   300L  // swipe gesture length
-        private const val SPIN_RESULT_DELAY_MS = 1_500L  // wait for network/animation
-        private const val RETRY_DELAY_MS      = 2_000L  // pause between retry attempts
-        private const val BACK_DELAY_MS       =   600L  // wait for map to settle after back
-        private const val MAX_SPIN_ATTEMPTS   =     3
+        // Timing constants
+        private const val OPEN_DELAY_MS        = 1_000L  // wait for detail view animation
+        private const val SWIPE_DURATION_MS    =   300L  // swipe gesture length
+        private const val NUM_SPIN_ATTEMPTS    =    10L  // spin this many times
+        private const val SPIN_RESULT_DELAY_MS =   500L  // delay before checking spin result
+        private const val SCAN_IMMEDIATELY_MS  =   500L  // scan right away
     }
 }
