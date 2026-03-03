@@ -1,7 +1,6 @@
 package io.github.joeyparrish.backpacker.automation
 
 import android.content.Context
-import android.graphics.PointF
 import android.graphics.RectF
 import android.util.Log
 import android.widget.Toast
@@ -76,20 +75,15 @@ class AutomationEngine(
                 CoordinateTransform.toDeviceY(bottom, w)
             )
 
-            // All non-trivial contours get a yellow bounding box.
-            val deviceAllBounds = result.allBounds.map { it.toDevice() }
-
-            // Rejected contours get a red X at their bounding-box centre.
-            val deviceRejectedCenters = result.rejectedBounds.map { r ->
-                val deviceRect = r.toDevice()
-                PointF(deviceRect.centerX(), deviceRect.centerY())
-            }
+            // Passed contours get a yellow box; rejected contours get a red box.
+            val devicePassedBounds = result.passed.map { it.bounds.toDevice() }
+            val deviceRejectedBounds = result.rejectedBounds.map { it.toDevice() }
 
             withContext(Dispatchers.Main) {
                 lastToast?.cancel()
                 lastToast = Toast.makeText(context, "Stops: ${result.passed.size}", Toast.LENGTH_SHORT)
                 lastToast?.show()
-                tapperService.showDebugMarkers(deviceRejectedCenters, deviceAllBounds)
+                tapperService.showDebugMarkers(devicePassedBounds, deviceRejectedBounds)
             }
         } else {
             screenshot.recycle()

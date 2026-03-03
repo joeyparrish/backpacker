@@ -3,7 +3,6 @@ package io.github.joeyparrish.backpacker.service
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
-import android.graphics.PointF
 import android.graphics.RectF
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
@@ -128,9 +127,9 @@ class TapperService : AccessibilityService() {
         overlayView?.setState(OverlayView.State.IDLE)
     }
 
-    /** Show debug X markers and bounding boxes (device pixels) for 2 seconds. */
-    fun showDebugMarkers(centroids: List<PointF>, bounds: List<RectF>) {
-        debugOverlayView?.showMarkers(centroids, bounds)
+    /** Show debug bounding boxes (device pixels) for 2 seconds. */
+    fun showDebugMarkers(passedBounds: List<RectF>, rejectedBounds: List<RectF>) {
+        debugOverlayView?.showMarkers(passedBounds, rejectedBounds)
     }
 
     companion object {

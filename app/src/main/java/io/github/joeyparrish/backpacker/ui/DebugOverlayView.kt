@@ -5,7 +5,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PixelFormat
-import android.graphics.PointF
 import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
@@ -15,10 +14,11 @@ import android.view.WindowManager
 import android.view.WindowManager.LayoutParams
 
 /**
- * Fullscreen transparent WindowManager overlay that draws red X markers at
- * specified device-pixel coordinates, then auto-hides after [DISPLAY_MS] ms.
+ * Fullscreen transparent WindowManager overlay that draws coloured bounding
+ * boxes over detected contours, then auto-hides after [DISPLAY_MS] ms.
  *
- * Used by debug scan mode to visualise detected Pokéstop centroids.
+ * Yellow = passed all filters (detected Pokéstop).
+ * Red    = failed height or area filter (rejected).
  */
 class DebugOverlayView(context: Context) {
 
@@ -39,11 +39,11 @@ class DebugOverlayView(context: Context) {
 
     private val hideRunnable = Runnable { hide() }
 
-    /** Show X markers and bounding boxes (device pixels) and auto-hide after [DISPLAY_MS] ms. */
-    fun showMarkers(centroids: List<PointF>, bounds: List<RectF>) {
+    /** Show coloured bounding boxes (device pixels) and auto-hide after [DISPLAY_MS] ms. */
+    fun showMarkers(passedBounds: List<RectF>, rejectedBounds: List<RectF>) {
         handler.removeCallbacks(hideRunnable)
-        markerView.centroids = centroids
-        markerView.bounds = bounds
+        markerView.passedBounds = passedBounds
+        markerView.rejectedBounds = rejectedBounds
         if (!isAttached) {
             try {
                 windowManager.addView(markerView, layoutParams)
@@ -72,14 +72,13 @@ class DebugOverlayView(context: Context) {
 
     private class MarkerView(context: Context) : View(context) {
 
-        var centroids: List<PointF> = emptyList()
+        var passedBounds: List<RectF> = emptyList()
             set(value) { field = value; invalidate() }
 
-        var bounds: List<RectF> = emptyList()
+        var rejectedBounds: List<RectF> = emptyList()
             set(value) { field = value; invalidate() }
 
         private val density = resources.displayMetrics.density
-        private val arm = 22f * density
 
         // The TYPE_ACCESSIBILITY_OVERLAY window's content area starts below the status bar
         // even with FLAG_LAYOUT_IN_SCREEN, but the VirtualDisplay captures from physical y=0.
@@ -89,14 +88,14 @@ class DebugOverlayView(context: Context) {
             (if (id > 0) resources.getDimensionPixelSize(id) else 0).toFloat()
         }
 
-        private val xPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.RED
-            strokeWidth = 5f * density
+        private val passedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.YELLOW
+            strokeWidth = 3f * density
             style = Paint.Style.STROKE
         }
 
-        private val rectPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.YELLOW
+        private val rejectedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.RED
             strokeWidth = 3f * density
             style = Paint.Style.STROKE
         }
@@ -104,12 +103,11 @@ class DebugOverlayView(context: Context) {
         override fun onDraw(canvas: Canvas) {
             canvas.save()
             canvas.translate(0f, -statusBarOffset)
-            for (r in bounds) {
-                canvas.drawRect(r, rectPaint)
+            for (r in passedBounds) {
+                canvas.drawRect(r, passedPaint)
             }
-            for (pt in centroids) {
-                canvas.drawLine(pt.x - arm, pt.y - arm, pt.x + arm, pt.y + arm, xPaint)
-                canvas.drawLine(pt.x + arm, pt.y - arm, pt.x - arm, pt.y + arm, xPaint)
+            for (r in rejectedBounds) {
+                canvas.drawRect(r, rejectedPaint)
             }
             canvas.restore()
         }
