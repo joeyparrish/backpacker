@@ -19,4 +19,5 @@
     <string name="spinner_debug_label">Debug spinner: show detected color and test spin</string>
     <string name="status_accessibility_ok">Gesture service: ENABLED</string>
     <string name="status_accessibility_missing">Gesture service: DISABLED</string>
+    <string name="lifetime_spins">Lifetime spins: %1$d</string>
 </resources>

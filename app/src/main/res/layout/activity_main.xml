@@ -142,5 +142,12 @@
             app:thumbTint="@color/switch_thumb_tint"
             app:trackTint="@color/switch_track_tint" />
 
+        <TextView
+            android:id="@+id/tvLifetimeSpins"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:textAppearance="?attr/textAppearanceBody1" />
+
     </LinearLayout>
 </ScrollView>

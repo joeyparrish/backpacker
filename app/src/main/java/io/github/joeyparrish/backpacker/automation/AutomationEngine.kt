@@ -221,6 +221,9 @@ class AutomationEngine(
         val succeededOrFailed = if (success) "succeeded" else "failed"
         if (success) {
             sessionSpins++
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val lifetime = prefs.getInt(PREF_LIFETIME_SPINS, 0) + 1
+            prefs.edit().putInt(PREF_LIFETIME_SPINS, lifetime).apply()
         }
 
         val elapsedHours = (System.currentTimeMillis() - sessionStartMs) / 3_600_000.0
@@ -317,5 +320,8 @@ class AutomationEngine(
         private const val NUM_SPIN_ATTEMPTS    =    10L  // spin this many times
         private const val SPIN_RESULT_DELAY_MS =   500L  // delay before checking spin result
         private const val SCAN_IMMEDIATELY_MS  =   500L  // scan right away
+
+        const val PREFS_NAME         = "backpacker_prefs"
+        const val PREF_LIFETIME_SPINS = "lifetime_spins"
     }
 }

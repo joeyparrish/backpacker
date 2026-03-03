@@ -179,6 +179,10 @@ class MainActivity : AppCompatActivity() {
         binding.switchOverlay.isEnabled = a11yOk
         updateOverlaySwitch()
 
+        val prefs = getSharedPreferences(AutomationEngine.PREFS_NAME, Context.MODE_PRIVATE)
+        val lifetimeSpins = prefs.getInt(AutomationEngine.PREF_LIFETIME_SPINS, 0)
+        binding.tvLifetimeSpins.text = getString(R.string.lifetime_spins, lifetimeSpins)
+
         Log.d(TAG, "Status — a11y=$a11yOk notif=$notifOk battery=$batteryOk " +
                 "overlayShown=${TapperService.isOverlayShown} " +
                 "ready=${AutomationService.isReady} running=${AutomationService.isRunning}")
