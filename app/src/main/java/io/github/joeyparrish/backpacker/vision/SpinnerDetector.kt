@@ -17,8 +17,9 @@ import org.opencv.imgproc.Imgproc
  * Detection strategy:
  *   1. Convert frame to HSV (for colour masks) and greyscale (for Hough).
  *   2. HoughCircles on the greyscale image to locate the spinner circle.
- *      Expected outer radius: 35–50% of the normalised 720px width.
- *      If found, use detected centre + radius; if not, fall back to hardcoded defaults.
+ *      Radius constrained to 40–50% of normalised width (≥ 80% diameter), which
+ *      excludes smaller circles that may appear inside the disc photo.
+ *      If no circle is found, returns ABSENT immediately.
  *   3. Derive inner radius = outerR × RING_INNER_OUTER_RATIO (measured ≈ 0.90).
  *   4. Build an annular mask and AND it against purple / cyan colour masks.
  *   5. Report the colour whose ring-pixel fraction exceeds RING_DETECT_THRESHOLD.
@@ -75,33 +76,30 @@ class SpinnerDetector {
                 /* maxRadius = */ (w * HOUGH_MAX_RADIUS_FRAC).toInt()
             )
 
-            // Pick the detected circle closest to the screen centre; fall back to defaults.
+            // Pick the detected circle closest to the screen centre.
+            // The minimum radius constraint already excludes small circles inside the disc photo.
+            // If nothing is found, the ring is absent.
             val cx = w / 2.0
             val cy = h / 2.0
-            val center: Point
-            val outerR: Int
-            val innerR: Int
 
-            if (circles.cols() > 0) {
-                var best = circles.get(0, 0)!!
-                var bestDistSq = run { val dx = best[0] - cx; val dy = best[1] - cy; dx*dx + dy*dy }
-                for (i in 1 until circles.cols()) {
-                    val c = circles.get(0, i) ?: continue
-                    val dx = c[0] - cx; val dy = c[1] - cy
-                    val dSq = dx*dx + dy*dy
-                    if (dSq < bestDistSq) { bestDistSq = dSq; best = c }
-                }
-                center = Point(best[0], best[1])
-                outerR = best[2].toInt()
-                innerR = (outerR * RING_INNER_OUTER_RATIO).toInt()
-                Log.d(TAG, "Circle found: center=(${best[0].toInt()},${best[1].toInt()}) " +
-                           "outerR=$outerR innerR=$innerR")
-            } else {
-                center = Point(cx, cy)
-                outerR = (w * RING_OUTER_RADIUS_FRAC).toInt()
-                innerR = (outerR * RING_INNER_OUTER_RATIO).toInt()
-                Log.d(TAG, "No circle found via Hough; using defaults: outerR=$outerR innerR=$innerR")
+            if (circles.cols() == 0) {
+                Log.d(TAG, "No spinner circle found via Hough")
+                return SpinResult.ABSENT
             }
+
+            var best = circles.get(0, 0)!!
+            var bestDistSq = run { val dx = best[0] - cx; val dy = best[1] - cy; dx*dx + dy*dy }
+            for (i in 1 until circles.cols()) {
+                val c = circles.get(0, i) ?: continue
+                val dx = c[0] - cx; val dy = c[1] - cy
+                val dSq = dx*dx + dy*dy
+                if (dSq < bestDistSq) { bestDistSq = dSq; best = c }
+            }
+            val center = Point(best[0], best[1])
+            val outerR = best[2].toInt()
+            val innerR = (outerR * RING_INNER_OUTER_RATIO).toInt()
+            Log.d(TAG, "Circle found: center=(${best[0].toInt()},${best[1].toInt()}) " +
+                       "outerR=$outerR innerR=$innerR")
 
             // Build annular mask: filled outer circle minus filled inner circle.
             Imgproc.circle(ringMask, center, outerR, Scalar(255.0), -1)
@@ -141,16 +139,13 @@ class SpinnerDetector {
     companion object {
         private const val TAG = "Backpacker.SpinnerDetector"
 
-        // Fallback ring geometry (fractions of normalised 720px width).
-        // Measured on a 684px device: outer ≈ 43.9% of width.
-        private const val RING_OUTER_RADIUS_FRAC = 0.439
-
         // Ratio inner/outer measured at ≈ 538/600 = 0.897; using 0.90.
-        // Applied to both the Hough-detected radius and the fallback.
         private const val RING_INNER_OUTER_RATIO = 0.90
 
-        // HoughCircles search window: spinner outer radius expected at 35–50% of width.
-        private const val HOUGH_MIN_RADIUS_FRAC = 0.35
+        // HoughCircles search window.
+        // Minimum is 40% of width (= 80% diameter) so circles inside the disc photo are excluded.
+        // Measured outer radius on a 684px device: 43.9% of normalised 720px width.
+        private const val HOUGH_MIN_RADIUS_FRAC = 0.40
         private const val HOUGH_MAX_RADIUS_FRAC = 0.50
 
         // Minimum fraction of ring pixels that must match a colour to report that state.
