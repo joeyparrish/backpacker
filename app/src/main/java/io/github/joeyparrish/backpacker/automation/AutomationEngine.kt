@@ -221,9 +221,13 @@ class AutomationEngine(
         val succeededOrFailed = if (success) "succeeded" else "failed"
         if (success) {
             sessionSpins++
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val lifetime = prefs.getInt(PREF_LIFETIME_SPINS, 0) + 1
-            prefs.edit().putInt(PREF_LIFETIME_SPINS, lifetime).apply()
+            try {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val lifetime = prefs.getInt(PREF_LIFETIME_SPINS, 0) + 1
+                prefs.edit().putInt(PREF_LIFETIME_SPINS, lifetime).apply()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to persist lifetime spins: $e")
+            }
         }
 
         val elapsedHours = (System.currentTimeMillis() - sessionStartMs) / 3_600_000.0
