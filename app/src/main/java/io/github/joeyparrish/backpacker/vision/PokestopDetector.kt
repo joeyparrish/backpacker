@@ -32,10 +32,13 @@ class PokestopDetector {
     private val hsvUpper = Scalar(105.0, 255.0, 255.0)
 
     /** Min bounding-box height (720p px) for a valid disc contour. Calibrate from screenshots. */
-    private val minDiscHeight = 20
+    private val minDiscHeight = 40
 
     /** Max bounding-box height (720p px). Discard tall UI chrome. */
     private val maxDiscHeight = 120
+
+    /** Min contour area (720p px²). Filters small noise that passes the height check. */
+    private val minArea = 500
 
     private val morphKernelSize = Size(5.0, 5.0)
 
@@ -83,13 +86,18 @@ class PokestopDetector {
 
                 // Log all non-trivial contours so thresholds can be calibrated from logcat.
                 if (area >= 50) {
-                    val passed = bb.height in minDiscHeight..maxDiscHeight
+                    val verdict = when {
+                        bb.height !in minDiscHeight..maxDiscHeight ->
+                            "SKIP (h=${bb.height} not in $minDiscHeight..$maxDiscHeight)"
+                        area < minArea ->
+                            "SKIP (area=${area.toInt()} < $minArea)"
+                        else -> "PASS"
+                    }
                     Log.d(TAG, "Contour @ (${bb.x},${bb.y}): " +
-                            "h=${bb.height} w=${bb.width} area=${area.toInt()} " +
-                            "→ ${if (passed) "PASS" else "SKIP (h not in $minDiscHeight..$maxDiscHeight)"}")
+                            "h=${bb.height} w=${bb.width} area=${area.toInt()} → $verdict")
                 }
 
-                if (bb.height in minDiscHeight..maxDiscHeight) {
+                if (bb.height in minDiscHeight..maxDiscHeight && area >= minArea) {
                     val M = Imgproc.moments(contour)
                     if (M.m00 > 0) {
                         val cx = (M.m10 / M.m00).toFloat()
