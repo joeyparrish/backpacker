@@ -25,6 +25,10 @@ import org.opencv.imgproc.Imgproc
  * The [Mat] passed to [detectState] must be in RGBA format at 720p (as produced by
  * ScreenshotService). The caller retains ownership and must call [Mat.release] after use.
  *
+ * Intermediate Mats are pre-allocated as instance fields and reused across calls to avoid
+ * per-scan JNI allocation pressure in CAR mode (1 s scan interval).
+ * Call [release] when the detector is no longer needed.
+ *
  * Measured on a 684px-wide device (normalised to 720px):
  *   outer radius ≈ 43.9% of width, inner/outer ≈ 90%.
  */
@@ -41,6 +45,15 @@ class SpinnerDetector {
     private val cyanHsvLower = Scalar( 85.0, 100.0, 100.0)
     private val cyanHsvUpper = Scalar(130.0, 255.0, 255.0)
 
+    // Pre-allocated scratch Mats — reused across detectState() calls.
+    private val hsv       = Mat()
+    private val gray      = Mat()
+    private val circles   = Mat()
+    private val colorMask = Mat()
+    private val combined  = Mat()
+    // ringMask is lazy: sized to the first frame's dimensions and reused thereafter.
+    private var ringMask  = Mat()
+
     /**
      * Detect the state of the spinner ring.
      * Returns [SpinResult.PURPLE] if spun, [SpinResult.CYAN] if ready, [SpinResult.ABSENT] otherwise.
@@ -51,91 +64,93 @@ class SpinnerDetector {
         val h = screenshot.rows()
 
         // screenshot is already at 720p RGBA — no scaling needed.
-        val hsv       = Mat()
-        val gray      = Mat()
-        val circles   = Mat()
-        val ringMask  = Mat.zeros(h, w, CvType.CV_8UC1)
-        val colorMask = Mat()
-        val combined  = Mat()
 
-        return try {
-            // HSV for colour detection
-            Imgproc.cvtColor(screenshot, hsv, Imgproc.COLOR_RGBA2RGB)
-            Imgproc.cvtColor(hsv,  hsv, Imgproc.COLOR_RGB2HSV)
+        // HSV for colour detection
+        Imgproc.cvtColor(screenshot, hsv, Imgproc.COLOR_RGBA2RGB)
+        Imgproc.cvtColor(hsv,  hsv, Imgproc.COLOR_RGB2HSV)
 
-            // Greyscale for Hough circle detection
-            Imgproc.cvtColor(screenshot, gray, Imgproc.COLOR_RGBA2GRAY)
-            Imgproc.GaussianBlur(gray, gray, Size(9.0, 9.0), 2.0)
+        // Greyscale for Hough circle detection
+        Imgproc.cvtColor(screenshot, gray, Imgproc.COLOR_RGBA2GRAY)
+        Imgproc.GaussianBlur(gray, gray, Size(9.0, 9.0), 2.0)
 
-            Imgproc.HoughCircles(
-                gray, circles, Imgproc.HOUGH_GRADIENT,
-                /* dp        = */ 1.0,
-                /* minDist   = */ h / 2.0,   // expect at most one large circle
-                /* param1    = */ 100.0,
-                /* param2    = */ 30.0,
-                /* minRadius = */ (w * HOUGH_MIN_RADIUS_FRAC).toInt(),
-                /* maxRadius = */ (w * HOUGH_MAX_RADIUS_FRAC).toInt()
-            )
+        Imgproc.HoughCircles(
+            gray, circles, Imgproc.HOUGH_GRADIENT,
+            /* dp        = */ 1.0,
+            /* minDist   = */ h / 2.0,   // expect at most one large circle
+            /* param1    = */ 100.0,
+            /* param2    = */ 30.0,
+            /* minRadius = */ (w * HOUGH_MIN_RADIUS_FRAC).toInt(),
+            /* maxRadius = */ (w * HOUGH_MAX_RADIUS_FRAC).toInt()
+        )
 
-            // Pick the detected circle closest to the screen centre.
-            // The minimum radius constraint already excludes small circles inside the disc photo.
-            // If nothing is found, the ring is absent.
-            val cx = w / 2.0
-            val cy = h / 2.0
+        // Pick the detected circle closest to the screen centre.
+        // The minimum radius constraint already excludes small circles inside the disc photo.
+        // If nothing is found, the ring is absent.
+        val cx = w / 2.0
+        val cy = h / 2.0
 
-            if (circles.cols() == 0) {
-                Log.d(TAG, "No spinner circle found via Hough")
-                return SpinResult.ABSENT
-            }
-
-            var best = circles.get(0, 0)!!
-            var bestDistSq = run { val dx = best[0] - cx; val dy = best[1] - cy; dx*dx + dy*dy }
-            for (i in 1 until circles.cols()) {
-                val c = circles.get(0, i) ?: continue
-                val dx = c[0] - cx; val dy = c[1] - cy
-                val dSq = dx*dx + dy*dy
-                if (dSq < bestDistSq) { bestDistSq = dSq; best = c }
-            }
-            val center = Point(best[0], best[1])
-            val outerR = best[2].toInt()
-            val innerR = (outerR * RING_INNER_OUTER_RATIO).toInt()
-            Log.d(TAG, "Circle found: center=(${best[0].toInt()},${best[1].toInt()}) " +
-                       "outerR=$outerR innerR=$innerR")
-
-            // Build annular mask: filled outer circle minus filled inner circle.
-            Imgproc.circle(ringMask, center, outerR, Scalar(255.0), -1)
-            Imgproc.circle(ringMask, center, innerR, Scalar(  0.0), -1)
-            val ringPixels = Core.countNonZero(ringMask).toFloat()
-
-            // Check purple (spun)
-            Core.inRange(hsv, spunHsvLower, spunHsvUpper, colorMask)
-            Core.bitwise_and(colorMask, ringMask, combined)
-            val purpleRatio = Core.countNonZero(combined) / ringPixels
-            Log.d(TAG, "Purple ring ratio: $purpleRatio")
-            if (purpleRatio > RING_DETECT_THRESHOLD) return SpinResult.PURPLE
-
-            // Check cyan (ready to spin)
-            Core.inRange(hsv, cyanHsvLower, cyanHsvUpper, colorMask)
-            Core.bitwise_and(colorMask, ringMask, combined)
-            val cyanRatio = Core.countNonZero(combined) / ringPixels
-            Log.d(TAG, "Cyan ring ratio: $cyanRatio")
-            if (cyanRatio > RING_DETECT_THRESHOLD) return SpinResult.CYAN
-
-            SpinResult.ABSENT
-        } finally {
-            // Do not release screenshot — owned by caller.
-            hsv.release()
-            gray.release()
-            circles.release()
-            ringMask.release()
-            colorMask.release()
-            combined.release()
+        if (circles.cols() == 0) {
+            Log.d(TAG, "No spinner circle found via Hough")
+            return SpinResult.ABSENT
         }
+
+        var best = circles.get(0, 0)!!
+        var bestDistSq = run { val dx = best[0] - cx; val dy = best[1] - cy; dx*dx + dy*dy }
+        for (i in 1 until circles.cols()) {
+            val c = circles.get(0, i) ?: continue
+            val dx = c[0] - cx; val dy = c[1] - cy
+            val dSq = dx*dx + dy*dy
+            if (dSq < bestDistSq) { bestDistSq = dSq; best = c }
+        }
+        val center = Point(best[0], best[1])
+        val outerR = best[2].toInt()
+        val innerR = (outerR * RING_INNER_OUTER_RATIO).toInt()
+        Log.d(TAG, "Circle found: center=(${best[0].toInt()},${best[1].toInt()}) " +
+                   "outerR=$outerR innerR=$innerR")
+
+        // Ensure ringMask is the right size (constant after first call at 720p), then zero it.
+        if (ringMask.rows() != h || ringMask.cols() != w) {
+            ringMask.release()
+            ringMask = Mat.zeros(h, w, CvType.CV_8UC1)
+        } else {
+            ringMask.setTo(Scalar(0.0))
+        }
+
+        // Build annular mask: filled outer circle minus filled inner circle.
+        Imgproc.circle(ringMask, center, outerR, Scalar(255.0), -1)
+        Imgproc.circle(ringMask, center, innerR, Scalar(  0.0), -1)
+        val ringPixels = Core.countNonZero(ringMask).toFloat()
+
+        // Check purple (spun)
+        Core.inRange(hsv, spunHsvLower, spunHsvUpper, colorMask)
+        Core.bitwise_and(colorMask, ringMask, combined)
+        val purpleRatio = Core.countNonZero(combined) / ringPixels
+        Log.d(TAG, "Purple ring ratio: $purpleRatio")
+        if (purpleRatio > RING_DETECT_THRESHOLD) return SpinResult.PURPLE
+
+        // Check cyan (ready to spin)
+        Core.inRange(hsv, cyanHsvLower, cyanHsvUpper, colorMask)
+        Core.bitwise_and(colorMask, ringMask, combined)
+        val cyanRatio = Core.countNonZero(combined) / ringPixels
+        Log.d(TAG, "Cyan ring ratio: $cyanRatio")
+        if (cyanRatio > RING_DETECT_THRESHOLD) return SpinResult.CYAN
+
+        return SpinResult.ABSENT
     }
 
     /** Returns true if the spinner ring appears to have turned purple (spin succeeded). */
     fun isSpinSuccess(screenshot: Mat): Boolean =
         detectState(screenshot) == SpinResult.PURPLE
+
+    /** Release all pre-allocated Mats. Call when the detector is no longer needed. */
+    fun release() {
+        hsv.release()
+        gray.release()
+        circles.release()
+        colorMask.release()
+        combined.release()
+        ringMask.release()
+    }
 
     companion object {
         private const val TAG = "Backpacker.SpinnerDetector"

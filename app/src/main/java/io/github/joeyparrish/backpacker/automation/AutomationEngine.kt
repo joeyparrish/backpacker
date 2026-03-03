@@ -69,6 +69,12 @@ class AutomationEngine(
         running = false
     }
 
+    /** Release pre-allocated OpenCV Mats held by the detectors. Call after [stop]. */
+    fun release() {
+        pokestopDetector.release()
+        spinnerDetector.release()
+    }
+
     private suspend fun scanLoop() {
         // Skip the expensive capture + CV work when the display is off.
         // The loop will naturally poll again after SCREEN_OFF_POLL_MS.

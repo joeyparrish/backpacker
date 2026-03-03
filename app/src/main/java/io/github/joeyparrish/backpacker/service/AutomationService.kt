@@ -194,6 +194,7 @@ class AutomationService : Service() {
     private fun stopLoop() {
         if (!isRunning) return
         automationEngine?.stop()
+        automationEngine?.release()
         automationEngine = null
         scope?.cancel()
         scope = null

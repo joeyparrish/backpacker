@@ -24,6 +24,11 @@ import org.opencv.imgproc.Imgproc
  *
  * The [Mat] passed to [detect] must be in RGBA format at 720p (as produced by ScreenshotService).
  * The caller retains ownership and must call [Mat.release] after [detect] returns.
+ *
+ * Intermediate Mats ([hsv], [mask], [morphed], [hierarchy], [morphKernel], [contourMask]) are
+ * pre-allocated as instance fields and reused across calls to avoid per-scan JNI allocation
+ * pressure, which matters in CAR mode (1 s scan interval).  Call [release] when the detector
+ * is no longer needed.
  */
 class PokestopDetector {
 
@@ -47,6 +52,15 @@ class PokestopDetector {
     private val minArea = 650
 
     private val morphKernelSize = Size(5.0, 5.0)
+
+    // Pre-allocated scratch Mats — reused across detect() calls to avoid per-scan JNI allocs.
+    private val hsv         = Mat()
+    private val mask        = Mat()
+    private val morphed     = Mat()
+    private val hierarchy   = Mat()
+    private val morphKernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, morphKernelSize)
+    // contourMask is lazy: sized to the first frame's dimensions and reused thereafter.
+    private var contourMask = Mat()
 
     /** A single detection: moment centroid + bounding box, both in 720p-normalised space. */
     data class Disc(val centroid: PointF, val bounds: RectF)
@@ -73,95 +87,95 @@ class PokestopDetector {
         val normHeight = screenshot.rows()
 
         // screenshot is already at 720p RGBA — no scaling needed.
-        val hsv     = Mat()
-        val mask    = Mat()
-        val morphed = Mat()
+        Imgproc.cvtColor(screenshot, hsv, Imgproc.COLOR_RGBA2RGB)
+        Imgproc.cvtColor(hsv, hsv, Imgproc.COLOR_RGB2HSV)
+        Core.inRange(hsv, hsvLower, hsvUpper, mask)
+        Imgproc.morphologyEx(mask, morphed, Imgproc.MORPH_CLOSE, morphKernel)
 
-        try {
-            Imgproc.cvtColor(screenshot, hsv, Imgproc.COLOR_RGBA2RGB)
-            Imgproc.cvtColor(hsv, hsv, Imgproc.COLOR_RGB2HSV)
-            Core.inRange(hsv, hsvLower, hsvUpper, mask)
+        val contours = mutableListOf<MatOfPoint>()
+        Imgproc.findContours(
+            morphed, contours, hierarchy,
+            Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE
+        )
 
-            val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, morphKernelSize)
-            Imgproc.morphologyEx(mask, morphed, Imgproc.MORPH_CLOSE, kernel)
+        // Ensure contourMask is the right size for this frame (constant after first call at 720p).
+        if (contourMask.rows() != normHeight || contourMask.cols() != normWidth) {
+            contourMask.release()
+            contourMask = Mat.zeros(normHeight, normWidth, CvType.CV_8UC1)
+        }
 
-            val contours = mutableListOf<MatOfPoint>()
-            val hierarchy = Mat()
-            Imgproc.findContours(
-                morphed, contours, hierarchy,
-                Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE
-            )
-            hierarchy.release()
+        val screenCx = normWidth / 2f
+        val screenCy = normHeight / 2f
+        val detections = mutableListOf<Disc>()
+        val allBounds = mutableListOf<RectF>()
+        val rejectedBounds = mutableListOf<RectF>()
 
-            val screenCx = normWidth / 2f
-            val screenCy = normHeight / 2f
-            val detections = mutableListOf<Disc>()
-            val allBounds = mutableListOf<RectF>()
-            val rejectedBounds = mutableListOf<RectF>()
+        for (contour in contours) {
+            val bb: Rect = Imgproc.boundingRect(contour)
+            val area = Imgproc.contourArea(contour)
 
-            for (contour in contours) {
-                val bb: Rect = Imgproc.boundingRect(contour)
-                val area = Imgproc.contourArea(contour)
+            // Log all non-trivial contours so thresholds can be calibrated from logcat.
+            if (area >= 50) {
+                // Measure mean HSV within this contour so we can calibrate the hue filter.
+                // Reuse contourMask: clear to zeros, draw this contour, measure mean, repeat.
+                contourMask.setTo(Scalar(0.0))
+                Imgproc.drawContours(contourMask, listOf(contour), 0, Scalar(255.0), -1)
+                val meanHsv = Core.mean(hsv, contourMask)
+                val mH = meanHsv.`val`[0].toInt()
+                val mS = meanHsv.`val`[1].toInt()
+                val mV = meanHsv.`val`[2].toInt()
 
-                // Log all non-trivial contours so thresholds can be calibrated from logcat.
-                if (area >= 50) {
-                    // Measure mean HSV within this contour so we can calibrate the hue filter.
-                    val contourMask = Mat.zeros(normHeight, normWidth, CvType.CV_8UC1)
-                    Imgproc.drawContours(contourMask, listOf(contour), 0, Scalar(255.0), -1)
-                    val meanHsv = Core.mean(hsv, contourMask)
-                    contourMask.release()
-                    val mH = meanHsv.`val`[0].toInt()
-                    val mS = meanHsv.`val`[1].toInt()
-                    val mV = meanHsv.`val`[2].toInt()
+                val verdict = when {
+                    bb.height !in minDiscHeight..maxDiscHeight ->
+                        "SKIP (h=${bb.height} not in $minDiscHeight..$maxDiscHeight)"
+                    area < minArea ->
+                        "SKIP (area=${area.toInt()} < $minArea)"
+                    else -> "PASS"
+                }
+                Log.d(TAG, "Contour @ (${bb.x},${bb.y}): " +
+                        "h=${bb.height} w=${bb.width} area=${area.toInt()} " +
+                        "meanHSV=($mH,$mS,$mV) " +
+                        "→ $verdict")
 
-                    val verdict = when {
-                        bb.height !in minDiscHeight..maxDiscHeight ->
-                            "SKIP (h=${bb.height} not in $minDiscHeight..$maxDiscHeight)"
-                        area < minArea ->
-                            "SKIP (area=${area.toInt()} < $minArea)"
-                        else -> "PASS"
-                    }
-                    Log.d(TAG, "Contour @ (${bb.x},${bb.y}): " +
-                            "h=${bb.height} w=${bb.width} area=${area.toInt()} " +
-                            "meanHSV=($mH,$mS,$mV) " +
-                            "→ $verdict")
+                val bounds = RectF(
+                    bb.x.toFloat(), bb.y.toFloat(),
+                    (bb.x + bb.width).toFloat(), (bb.y + bb.height).toFloat()
+                )
+                allBounds.add(bounds)
 
-                    val bounds = RectF(
-                        bb.x.toFloat(), bb.y.toFloat(),
-                        (bb.x + bb.width).toFloat(), (bb.y + bb.height).toFloat()
-                    )
-                    allBounds.add(bounds)
-
-                    val passes = bb.height in minDiscHeight..maxDiscHeight && area >= minArea
-                    if (!passes) {
-                        rejectedBounds.add(bounds)
-                    } else {
-                        val M = Imgproc.moments(contour)
-                        if (M.m00 > 0) {
-                            val cx = (M.m10 / M.m00).toFloat()
-                            val cy = (M.m01 / M.m00).toFloat()
-                            detections.add(Disc(PointF(cx, cy), bounds))
-                        }
+                val passes = bb.height in minDiscHeight..maxDiscHeight && area >= minArea
+                if (!passes) {
+                    rejectedBounds.add(bounds)
+                } else {
+                    val M = Imgproc.moments(contour)
+                    if (M.m00 > 0) {
+                        val cx = (M.m10 / M.m00).toFloat()
+                        val cy = (M.m01 / M.m00).toFloat()
+                        detections.add(Disc(PointF(cx, cy), bounds))
                     }
                 }
-                contour.release()
             }
-
-            detections.sortBy { d ->
-                val dx = d.centroid.x - screenCx
-                val dy = d.centroid.y - screenCy
-                dx * dx + dy * dy
-            }
-
-            Log.d(TAG, "Detected ${detections.size} Pokéstop disc(s) (of ${contours.size} total contours)")
-            return DetectionResult(detections, allBounds, rejectedBounds)
-
-        } finally {
-            // Do not release screenshot — owned by caller.
-            hsv.release()
-            mask.release()
-            morphed.release()
+            contour.release()
         }
+
+        detections.sortBy { d ->
+            val dx = d.centroid.x - screenCx
+            val dy = d.centroid.y - screenCy
+            dx * dx + dy * dy
+        }
+
+        Log.d(TAG, "Detected ${detections.size} Pokéstop disc(s) (of ${contours.size} total contours)")
+        return DetectionResult(detections, allBounds, rejectedBounds)
+    }
+
+    /** Release all pre-allocated Mats. Call when the detector is no longer needed. */
+    fun release() {
+        hsv.release()
+        mask.release()
+        morphed.release()
+        hierarchy.release()
+        morphKernel.release()
+        contourMask.release()
     }
 
     companion object {
