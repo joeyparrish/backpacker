@@ -29,17 +29,17 @@ import org.opencv.imgproc.Imgproc
 class PokestopDetector {
 
     // HSV lower/upper bounds for the cyan disc colour (OpenCV: H 0-180, S/V 0-255)
-    private val hsvLower = Scalar(85.0, 150.0, 150.0)
-    private val hsvUpper = Scalar(105.0, 255.0, 255.0)
+    private val hsvLower = Scalar(90.0, 150.0, 150.0)
+    private val hsvUpper = Scalar(102.0, 255.0, 255.0)
 
     /** Min bounding-box height (720p px) for a valid disc contour. Calibrate from screenshots. */
-    private val minDiscHeight = 40
+    private val minDiscHeight = 80
 
     /** Max bounding-box height (720p px). Discard tall UI chrome. */
-    private val maxDiscHeight = 120
+    private val maxDiscHeight = 110
 
     /** Min contour area (720p px²). Filters small noise that passes the height check. */
-    private val minArea = 500
+    private val minArea = 1000
 
     private val morphKernelSize = Size(5.0, 5.0)
 
