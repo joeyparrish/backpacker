@@ -146,7 +146,7 @@ class OverlayView(
                     if (!dragging) {
                         state = when (state) {
                             State.IDLE  -> State.HOUSE
-                            State.HOUSE -> State.CAR
+                            State.HOUSE -> if (skipCarMode) State.IDLE else State.CAR
                             State.CAR   -> State.IDLE
                         }
                         updateAppearance()
@@ -161,5 +161,8 @@ class OverlayView(
 
     companion object {
         private const val TAG = "Backpacker.OverlayView"
+
+        /** When true, the FAB cycles IDLE → HOUSE → IDLE (skips CAR). */
+        @Volatile var skipCarMode = false
     }
 }

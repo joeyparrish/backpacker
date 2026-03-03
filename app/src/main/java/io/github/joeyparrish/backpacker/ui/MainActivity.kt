@@ -19,6 +19,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import io.github.joeyparrish.backpacker.R
+import io.github.joeyparrish.backpacker.automation.AutomationEngine
 import io.github.joeyparrish.backpacker.databinding.ActivityMainBinding
 import io.github.joeyparrish.backpacker.service.AutomationService
 import io.github.joeyparrish.backpacker.service.TapperService
@@ -77,6 +78,10 @@ class MainActivity : AppCompatActivity() {
         binding.btnRequestNotification.setOnClickListener { requestNotificationPermission() }
         binding.btnBattery.setOnClickListener { openBatteryOptimizationSettings() }
         binding.btnToggle.setOnClickListener { handleOverlayToggle() }
+        binding.switchDebugScan.setOnCheckedChangeListener { _, checked ->
+            AutomationEngine.debugScan = checked
+            OverlayView.skipCarMode = checked
+        }
     }
 
     override fun onResume() {

@@ -125,5 +125,12 @@
             android:textSize="16sp"
             app:cornerRadius="8dp" />
 
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switchDebugScan"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/debug_scan_label" />
+
     </LinearLayout>
 </ScrollView>

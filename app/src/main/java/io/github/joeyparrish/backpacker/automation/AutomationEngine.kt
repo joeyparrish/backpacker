@@ -1,10 +1,13 @@
 package io.github.joeyparrish.backpacker.automation
 
 import android.content.Context
+import android.graphics.PointF
 import android.util.Log
 import android.widget.Toast
 import io.github.joeyparrish.backpacker.service.ScreenshotService
 import io.github.joeyparrish.backpacker.service.TapperService
+import io.github.joeyparrish.backpacker.util.CoordinateTransform
+import io.github.joeyparrish.backpacker.vision.PokestopDetector
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -25,6 +28,8 @@ class AutomationEngine(
 ) {
     @Volatile private var running = true
 
+    private val pokestopDetector = PokestopDetector()
+
     suspend fun run() {
         Log.i(TAG, "AutomationEngine starting")
         while (running && coroutineContext.isActive) {
@@ -42,7 +47,6 @@ class AutomationEngine(
         running = false
     }
 
-    // DEBUG: scan loop truncated — capture only, no image processing or gestures.
     private suspend fun scanLoop() {
         Log.d(TAG, "Scan loop: capturing screenshot")
 
@@ -54,7 +58,25 @@ class AutomationEngine(
 
         val w = screenshot.width
         val h = screenshot.height
-        screenshot.recycle()
+
+        if (debugScan) {
+            val discs = pokestopDetector.detect(screenshot)
+            screenshot.recycle()
+
+            val devicePoints = discs.map { pt ->
+                PointF(
+                    CoordinateTransform.toDeviceX(pt.x, w),
+                    CoordinateTransform.toDeviceY(pt.y, w)
+                )
+            }
+
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Stops: ${discs.size}", Toast.LENGTH_SHORT).show()
+                tapperService.showDebugMarkers(devicePoints)
+            }
+        } else {
+            screenshot.recycle()
+        }
 
         Log.i(TAG, "Screenshot captured: ${w}×${h}")
         Log.d(TAG, "Sleeping ${scanIntervalMs / 1000}s before next capture")
@@ -63,5 +85,8 @@ class AutomationEngine(
 
     companion object {
         private const val TAG = "Backpacker.AutomationEngine"
+
+        /** When true, each scan runs PokestopDetector and shows debug overlays. */
+        @Volatile var debugScan = false
     }
 }

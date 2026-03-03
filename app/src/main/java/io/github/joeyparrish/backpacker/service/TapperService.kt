@@ -3,8 +3,10 @@ package io.github.joeyparrish.backpacker.service
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
+import android.graphics.PointF
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import io.github.joeyparrish.backpacker.ui.DebugOverlayView
 import io.github.joeyparrish.backpacker.ui.OverlayView
 
 /**
@@ -21,17 +23,19 @@ import io.github.joeyparrish.backpacker.ui.OverlayView
 class TapperService : AccessibilityService() {
 
     private var overlayView: OverlayView? = null
+    private var debugOverlayView: DebugOverlayView? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
         Log.i(TAG, "TapperService connected")
 
-        // Create the overlay view so it is ready to show, but do not display it yet.
+        // Create the overlay views so they are ready to show, but do not display them yet.
         // The overlay is shown explicitly via showOverlay() once screen-capture permission
         // has been granted by the user in MainActivity.
         try {
             overlayView = OverlayView(this) { state -> handleToggle(state) }
+            debugOverlayView = DebugOverlayView(this)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create overlay: $e")
         }
@@ -47,7 +51,9 @@ class TapperService : AccessibilityService() {
 
     override fun onDestroy() {
         try { overlayView?.hide() } catch (e: Exception) { Log.w(TAG, "hide overlay: $e") }
+        try { debugOverlayView?.hide() } catch (e: Exception) { Log.w(TAG, "hide debug overlay: $e") }
         overlayView = null
+        debugOverlayView = null
         isOverlayShown = false
         instance = null
         Log.i(TAG, "TapperService destroyed")
@@ -119,6 +125,11 @@ class TapperService : AccessibilityService() {
      */
     fun notifyAutomationStopped() {
         overlayView?.setState(OverlayView.State.IDLE)
+    }
+
+    /** Show debug X markers at [points] (device pixels) for 2 seconds. */
+    fun showDebugMarkers(points: List<PointF>) {
+        debugOverlayView?.showMarkers(points)
     }
 
     companion object {
