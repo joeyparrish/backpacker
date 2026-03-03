@@ -1,20 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     FAB icon: aerodynamic sports-car side profile (facing right), 24×24 dp viewport.
+    Body uses Bézier curves for smooth, organic lines.
 
-    Geometry (car faces RIGHT; rear is left, nose is right):
-      • Body — asymmetric 9-point polygon
-                rear bottom  (2,17)  → rear top     (2,14)   upright hatch/trunk
-                             (2,14)  → C-pillar top (5,8)    steep rear window
-                             (5,8)   → roof rear    (9,6)    transition to roof
-                             (9,6)   → roof front   (14,6)   flat roofline
-                             (14,6)  → A-pillar base(19,11)  forward-raked windshield (45°)
-                             (19,11) → hood end     (21,11)  short flat hood
-                             (21,11) → nose top     (23,14)  sloped front
-                             (23,14) → nose bottom  (22,17)  wedge nose (slight undercut)
-                             close Z back to (2,17)           flat underbody
-      • Rear wheel — circle, centre (5,19),  r=2.5
-      • Front wheel — circle, centre (18,19), r=2.5
+    Body path (car faces RIGHT; rear is left, nose is right):
+      M 2,17 L 2,15       upright hatch/trunk
+      C 2,9 5,9 9,8       C-pillar: sweeps from vertical into roofline
+      L 14,8              flat roofline
+      C 18,8 20,12 21,13  A-pillar: horizontal roof into raked windshield base
+      L 22,13             short flat hood
+      C 23,13 23,15 22,17 rounded nose (bulges forward, sweeps down to underbody)
+      Z                   flat underbody back to (2,17)
+
+    • Rear wheel  — circle, centre (5,19),  r=2.5
+    • Front wheel — circle, centre (18,19), r=2.5
 
     Fill is white so OverlayView.updateAppearance() can tint it to any
     colour via imageTintList without fighting the drawable's own hue.
@@ -25,10 +24,17 @@
     android:viewportWidth="24"
     android:viewportHeight="24">
 
-    <!-- Body: fastback sports-car silhouette, facing right -->
+    <!-- Body: fastback silhouette with Bézier curves, facing right -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 2,17 L 2,14 L 5,8 L 9,6 L 14,6 L 19,11 L 21,11 L 23,14 L 22,17 Z" />
+        android:pathData="
+            M 2,17 L 2,15
+            C 2,9 5,9 9,8
+            L 14,8
+            C 18,8 20,12 21,13
+            L 22,13
+            C 23,13 23,15 22,17
+            Z" />
 
     <!-- Rear wheel: centre (5,19), r=2.5 -->
     <path
