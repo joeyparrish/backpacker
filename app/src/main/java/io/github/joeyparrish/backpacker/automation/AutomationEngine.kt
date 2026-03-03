@@ -160,6 +160,7 @@ class AutomationEngine(
     /**
      * One-shot spinner debug check. Captures a screenshot, runs [SpinnerDetector.detectState],
      * and shows a toast reporting whether the circle is cyan, purple, or absent.
+     * If cyan, performs a swipe and then re-checks the result.
      * Caller sends AutomationService.pause() afterward to reset FAB and service state.
      */
     private suspend fun runSpinnerDebugCheck() {
@@ -175,12 +176,50 @@ class AutomationEngine(
             return
         }
 
+        val deviceWidth  = screenshot.width
+        val deviceHeight = screenshot.height
         val state = spinnerDetector.detectState(screenshot)
         screenshot.recycle()
 
+        if (state == SpinnerDetector.SpinResult.CYAN) {
+            Log.i(TAG, "Spinner: cyan — swiping")
+            withContext(Dispatchers.Main) {
+                lastToast?.cancel()
+                lastToast = Toast.makeText(context, "Spinner: cyan — swiping", Toast.LENGTH_SHORT)
+                lastToast?.show()
+            }
+
+            val swipeY  = deviceHeight * 0.5f
+            val swipeX1 = deviceWidth  * 0.25f
+            val swipeX2 = deviceWidth  * 0.75f
+            tapperService.swipe(swipeX1, swipeY, swipeX2, swipeY, SWIPE_DURATION_MS)
+            delay(SPIN_RESULT_DELAY_MS)
+
+            val check = screenshotService.capture()
+            val afterState = if (check != null) {
+                spinnerDetector.detectState(check).also { check.recycle() }
+            } else {
+                null
+            }
+
+            val message = when (afterState) {
+                SpinnerDetector.SpinResult.PURPLE -> "Spinner: purple (success!)"
+                SpinnerDetector.SpinResult.CYAN   -> "Spinner: still cyan (failed)"
+                SpinnerDetector.SpinResult.ABSENT -> "Spinner: absent after swipe"
+                null                              -> "Spinner: no screenshot after swipe"
+            }
+            Log.i(TAG, message)
+            withContext(Dispatchers.Main) {
+                lastToast?.cancel()
+                lastToast = Toast.makeText(context, message, Toast.LENGTH_LONG)
+                lastToast?.show()
+            }
+            return
+        }
+
         val message = when (state) {
             SpinnerDetector.SpinResult.PURPLE -> "Spinner: purple"
-            SpinnerDetector.SpinResult.CYAN   -> "Spinner: cyan"
+            SpinnerDetector.SpinResult.CYAN   -> "Spinner: cyan"  // unreachable
             SpinnerDetector.SpinResult.ABSENT -> "Spinner: absent"
         }
         Log.i(TAG, message)
