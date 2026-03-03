@@ -75,9 +75,16 @@ class PokestopDetector {
             for (contour in contours) {
                 val bb: Rect = Imgproc.boundingRect(contour)
                 if (bb.height in minDiscHeight..maxDiscHeight) {
-                    val cx = (bb.x + bb.width / 2).toFloat()
-                    val cy = (bb.y + bb.height / 2).toFloat()
-                    centroids.add(PointF(cx, cy))
+                    // Use contour moments for the centroid rather than the bounding-box midpoint.
+                    // A Pokéstop disc sits on top of a thin pole; both are cyan, so the bounding
+                    // box includes the pole below the disc.  The moment centroid is weighted toward
+                    // the disc (larger area) and therefore lands on the disc rather than the pole.
+                    val M = Imgproc.moments(contour)
+                    if (M.m00 > 0) {
+                        val cx = (M.m10 / M.m00).toFloat()
+                        val cy = (M.m01 / M.m00).toFloat()
+                        centroids.add(PointF(cx, cy))
+                    }
                 }
                 contour.release()
             }
