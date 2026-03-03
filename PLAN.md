@@ -129,7 +129,7 @@ START (toggle activated)
 │   ├─ Capture screenshot
 │   ├─ Run Pokéstop disc detection (HSV + contour)
 │   ├─ If no cyan discs found → sleep 60s → repeat SCAN LOOP
-│   └─ For each cyan disc centroid (prioritize by proximity to screen center):
+│   └─ For each cyan disc centroid:
 │       │
 │       ├─ TAP disc centroid
 │       ├─ Wait 800–1200ms for detail view to open
