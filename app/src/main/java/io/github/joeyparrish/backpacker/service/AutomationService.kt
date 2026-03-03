@@ -225,11 +225,19 @@ class AutomationService : Service() {
     // Notifications
     // -------------------------------------------------------------------------
 
+    private fun mainActivityIntent(): PendingIntent =
+        PendingIntent.getActivity(
+            this, 0,
+            Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE
+        )
+
     private fun buildPreparingNotification(): Notification =
         NotificationCompat.Builder(this, BackpackerApp.CHANNEL_ID)
             .setContentTitle("Backpacker")
             .setContentText("Requesting screen capture permission…")
             .setSmallIcon(R.drawable.ic_notification)
+            .setContentIntent(mainActivityIntent())
             .setOngoing(true).setSilent(true)
             .build()
 
@@ -238,15 +246,11 @@ class AutomationService : Service() {
             .setContentTitle("Backpacker")
             .setContentText("Ready - tap the button to activate")
             .setSmallIcon(R.drawable.ic_notification)
+            .setContentIntent(mainActivityIntent())
             .setOngoing(true).setSilent(true)
             .build()
 
     private fun buildRunningNotification(): Notification {
-        val contentIntent = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE
-        )
         val stopIntent = PendingIntent.getService(
             this, 1,
             Intent(this, AutomationService::class.java).apply { action = ACTION_STOP },
@@ -256,7 +260,7 @@ class AutomationService : Service() {
             .setContentTitle("Backpacker Running")
             .setContentText("Capture loop active…")
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentIntent(contentIntent)
+            .setContentIntent(mainActivityIntent())
             .addAction(0, "Stop", stopIntent)
             .setOngoing(true).setSilent(true)
             .build()
