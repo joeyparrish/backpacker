@@ -2,6 +2,7 @@ package io.github.joeyparrish.backpacker.automation
 
 import android.content.Context
 import android.graphics.RectF
+import android.os.PowerManager
 import android.util.Log
 import android.widget.Toast
 import io.github.joeyparrish.backpacker.service.AutomationService
@@ -30,6 +31,7 @@ class AutomationEngine(
 ) {
     @Volatile private var running = true
 
+    private val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
     private val pokestopDetector = PokestopDetector()
     private val spinnerDetector = SpinnerDetector()
 
@@ -68,6 +70,14 @@ class AutomationEngine(
     }
 
     private suspend fun scanLoop() {
+        // Skip the expensive capture + CV work when the display is off.
+        // The loop will naturally poll again after SCREEN_OFF_POLL_MS.
+        if (!powerManager.isInteractive) {
+            Log.d(TAG, "Screen is off — skipping scan")
+            delay(SCREEN_OFF_POLL_MS)
+            return
+        }
+
         Log.d(TAG, "Scan loop: capturing screenshot")
         val t0 = System.currentTimeMillis()
 
@@ -267,6 +277,10 @@ class AutomationEngine(
 
         /** When true, the next FAB activation takes one spinner screenshot and reports its state. */
         @Volatile var spinnerDebug = false
+
+        // Poll interval when the screen is off — short enough to resume promptly,
+        // long enough not to spin the CPU while the display is dark.
+        private const val SCREEN_OFF_POLL_MS  = 5_000L
 
         // Timing constants — all may need tuning per device.
         private const val OPEN_DELAY_MS       = 1_000L  // wait for detail view animation
