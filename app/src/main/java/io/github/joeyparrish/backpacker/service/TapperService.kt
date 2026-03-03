@@ -1,3 +1,6 @@
+// Copyright 2026 Joey Parrish
+// SPDX-License-Identifier: MIT
+
 package io.github.joeyparrish.backpacker.service
 
 import android.accessibilityservice.AccessibilityService
