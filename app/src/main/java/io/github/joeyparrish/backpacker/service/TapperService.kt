@@ -122,7 +122,7 @@ class TapperService : AccessibilityService() {
     }
 
     companion object {
-        private const val TAG = "TapperService"
+        private const val TAG = "Backpacker.TapperService"
 
         @Volatile
         var instance: TapperService? = null

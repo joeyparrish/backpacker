@@ -124,6 +124,6 @@ class ScreenshotService(
     val screenHeight: Int get() = displayHeight
 
     companion object {
-        private const val TAG = "ScreenshotService"
+        private const val TAG = "Backpacker.ScreenshotService"
     }
 }

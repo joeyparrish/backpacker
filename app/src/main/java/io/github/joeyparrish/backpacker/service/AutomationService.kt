@@ -267,7 +267,7 @@ class AutomationService : Service() {
     // -------------------------------------------------------------------------
 
     companion object {
-        private const val TAG = "AutomationService"
+        private const val TAG = "Backpacker.AutomationService"
 
         const val ACTION_PREPARE = "io.github.joeyparrish.backpacker.ACTION_PREPARE"
         const val ACTION_READY   = "io.github.joeyparrish.backpacker.ACTION_READY"

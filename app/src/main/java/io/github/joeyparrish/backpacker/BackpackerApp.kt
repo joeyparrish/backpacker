@@ -38,7 +38,7 @@ class BackpackerApp : Application() {
     }
 
     companion object {
-        private const val TAG = "BackpackerApp"
+        private const val TAG = "Backpacker.BackpackerApp"
         const val CHANNEL_ID = "backpacker_service"
         const val NOTIFICATION_ID = 1001
     }

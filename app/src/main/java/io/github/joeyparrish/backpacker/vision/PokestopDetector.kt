@@ -100,6 +100,6 @@ class PokestopDetector {
     }
 
     companion object {
-        private const val TAG = "PokestopDetector"
+        private const val TAG = "Backpacker.PokestopDetector"
     }
 }

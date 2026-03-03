@@ -62,6 +62,6 @@ class AutomationEngine(
     }
 
     companion object {
-        private const val TAG = "AutomationEngine"
+        private const val TAG = "Backpacker.AutomationEngine"
     }
 }

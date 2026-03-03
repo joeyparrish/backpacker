@@ -115,6 +115,6 @@ class SpinnerDetector {
     }
 
     companion object {
-        private const val TAG = "SpinnerDetector"
+        private const val TAG = "Backpacker.SpinnerDetector"
     }
 }

@@ -160,6 +160,6 @@ class OverlayView(
     }
 
     companion object {
-        private const val TAG = "OverlayView"
+        private const val TAG = "Backpacker.OverlayView"
     }
 }
