@@ -9,4 +9,5 @@
     <color name="white">#FFFFFFFF</color>
     <color name="ic_launcher_background">#FF000000</color>
     <color name="gold">#FFD700</color>
+    <color name="gold_200">#B8860B</color>
 </resources>

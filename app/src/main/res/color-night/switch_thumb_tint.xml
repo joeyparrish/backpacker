@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- On: full gold to match in-app logo -->
+    <item android:state_checked="true" android:color="@color/gold" />
+    <!-- Off: white (Material default thumb colour on light theme) -->
+    <item android:color="#FFFFFFFF" />
+</selector>
