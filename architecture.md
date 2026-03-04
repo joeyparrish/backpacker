@@ -38,7 +38,7 @@ app/src/main/java/io/github/joeyparrish/backpacker/
 ├── automation/
 │   └── AutomationEngine.kt    - Coroutine state machine; drives the full spin loop
 ├── ui/
-│   ├── MainActivity.kt        - Permission onboarding; overlay + debug switches
+│   ├── MainActivity.kt        - Collapsible Setup / Automation / Debug sections; app header; version display; overlay + debug switches
 │   ├── OverlayView.kt         - Floating FAB: IDLE / HOUSE / CAR states
 │   └── DebugOverlayView.kt    - Full-screen debug overlay; bounding boxes + markers
 └── util/
