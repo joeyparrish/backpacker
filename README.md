@@ -47,9 +47,9 @@ Open **Backpacker** and work through the three setup steps shown on screen:
 3. **Disable Battery Optimization** — prevents Android from killing the service
    while the screen is off.
 
-Once all steps are done, toggle **Overlay enabled**. A system dialog will ask for
-screen-capture permission — tap **Start now**. A small floating button (the FAB)
-will appear on screen.
+Once all steps are done, toggle **Overlay enabled**. A system dialog will ask
+for screen-capture permission — tap **Start now**. A small floating button will
+appear on screen.
 
 ---
 
@@ -57,28 +57,29 @@ will appear on screen.
 
 Open Pokémon GO and use the floating button to control automation:
 
-| FAB state | Meaning |
+| Button state state | Meaning |
 |---|---|
-| Cyan pokestop icon (dim) | **IDLE** — not running |
-| Red house icon | **HOUSE mode** — scans once per minute (stationary) |
-| Red car icon | **CAR mode** — scans once per 5 seconds (driving) |
+| Cyan pokestop icon (dim) | **Idle** — not running |
+| Red house icon | **Stationary mode** — scans once per minute |
+| Red car icon | **Moving mode** — scans once per 5 seconds |
 
-Tap the FAB to cycle through states. Drag it to reposition.
+Tap the button to cycle through states. Drag it to reposition.
 
 When a Pokéstop disc is detected, the app taps it, swipes the spinner, and taps
-back to the map automatically. Session spin count and a lifetime total are tracked
-and shown in the main app.
+back to the map automatically. Session spin count and a lifetime total are
+tracked and shown in the main app.
 
 ### Debug modes (in the Backpacker app)
 
-- **Debug scan** — on each scan, highlights detected disc positions with bounding
-  boxes on a transparent overlay. Useful for tuning detection thresholds.
-- **Debug spinner** — on the next FAB tap, captures one screenshot and reports
-  whether the spinner is cyan, purple, or absent. If cyan, performs one swipe and
-  reports the result.
+- **Debug scan** — on each scan, highlights detected disc positions with
+  bounding boxes on a transparent overlay. Useful for tuning detection
+  thresholds in source.
+- **Debug spinner** — on the next tap, captures one screenshot and reports
+  whether the spinner is cyan, purple, or absent. If cyan, performs one swipe
+  and reports the result.
 
-Both debug modes disable CAR mode (the FAB only offers IDLE and HOUSE).
-Debug flags are cleared when the overlay is turned off.
+Both debug modes disable "moving" mode (the button only offers "idle" and
+"stationary").  Debug flags are cleared when the overlay is turned off.
 
 ---
 
