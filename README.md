@@ -1,4 +1,4 @@
-# Backpacker
+# ![Backpacker icon](icon.png) Backpacker
 
 An Android app that automates Pokéstop spinning in Pokémon GO. It uses Android's
 MediaProjection API to watch the screen and an AccessibilityService to inject
