@@ -61,6 +61,9 @@ class MainActivity : AppCompatActivity() {
     /** null = not yet initialised; set once on first updateStatus() call. */
     private var setupExpanded: Boolean? = null
 
+    /** Debug section starts collapsed; toggled only by user taps. */
+    private var debugExpanded: Boolean = false
+
     private val mpLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -134,6 +137,13 @@ class MainActivity : AppCompatActivity() {
             setupExpanded = !(setupExpanded ?: true)
             applySetupExpanded(animated = true)
         }
+
+        binding.debugHeader.setOnClickListener {
+            debugExpanded = !debugExpanded
+            applyDebugExpanded(animated = true)
+        }
+
+        applyDebugExpanded(animated = false)
     }
 
     override fun onResume() {
@@ -217,6 +227,16 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "Status — a11y=$a11yOk notif=$notifOk battery=$batteryOk " +
                 "overlayShown=${TapperService.isOverlayShown} " +
                 "ready=${AutomationService.isReady} running=${AutomationService.isRunning}")
+    }
+
+    private fun applyDebugExpanded(animated: Boolean) {
+        binding.debugContent.visibility = if (debugExpanded) View.VISIBLE else View.GONE
+        val targetRotation = if (debugExpanded) 0f else 180f
+        if (animated) {
+            binding.ivDebugChevron.animate().rotation(targetRotation).setDuration(200).start()
+        } else {
+            binding.ivDebugChevron.rotation = targetRotation
+        }
     }
 
     private fun applySetupExpanded(animated: Boolean) {

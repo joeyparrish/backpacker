@@ -23,4 +23,5 @@
     <string name="version">Version %1$s</string>
     <string name="section_setup">Setup</string>
     <string name="section_automation">Automation</string>
+    <string name="section_debug">Debug</string>
 </resources>

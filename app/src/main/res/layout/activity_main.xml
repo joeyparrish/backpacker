@@ -172,32 +172,70 @@
             app:thumbTint="@color/switch_thumb_tint"
             app:trackTint="@color/switch_track_tint" />
 
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/switchDebugScan"
+        <!-- Collapsible "Debug" section header -->
+        <LinearLayout
+            android:id="@+id/debugHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/debug_scan_label"
-            app:thumbTint="@color/switch_thumb_tint"
-            app:trackTint="@color/switch_track_tint" />
+            android:orientation="horizontal"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:padding="4dp"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="8dp"
+            android:gravity="center_vertical">
 
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/switchSpinnerDebug"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/spinner_debug_label"
-            app:thumbTint="@color/switch_thumb_tint"
-            app:trackTint="@color/switch_track_tint" />
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/section_debug"
+                android:textAppearance="?attr/textAppearanceHeadline5" />
 
-        <TextView
-            android:id="@+id/tvVersion"
+            <ImageView
+                android:id="@+id/ivDebugChevron"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_expand_more_24"
+                android:contentDescription="@null" />
+
+        </LinearLayout>
+
+        <!-- Collapsible debug content -->
+        <LinearLayout
+            android:id="@+id/debugContent"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
-            android:textAppearance="?attr/textAppearanceCaption"
-            android:alpha="0.5"
-            android:gravity="center" />
+            android:orientation="vertical">
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switchDebugScan"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/debug_scan_label"
+                app:thumbTint="@color/switch_thumb_tint"
+                app:trackTint="@color/switch_track_tint" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switchSpinnerDebug"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/spinner_debug_label"
+                app:thumbTint="@color/switch_thumb_tint"
+                app:trackTint="@color/switch_track_tint" />
+
+            <TextView
+                android:id="@+id/tvVersion"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="32dp"
+                android:textAppearance="?attr/textAppearanceCaption"
+                android:alpha="0.5"
+                android:gravity="center" />
+
+        </LinearLayout>
 
     </LinearLayout>
 </ScrollView>
