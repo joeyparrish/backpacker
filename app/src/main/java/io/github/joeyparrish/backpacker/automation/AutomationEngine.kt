@@ -184,19 +184,18 @@ class AutomationEngine(
             initialDiscState == null) {
             Log.w(TAG, "Wrong spot tapped - scan again")
 
-            // FIXME: How we back out from this state depends on other elements
-            // on screen.  If we tapped a stop (X in bottom center), we need to
-            // tap the X.  If we are still in the map (pokeball in bottom
-            // center), we need to do nothing.  If we are in some other state,
-            // like we tapped a Pokemon, we need to gesture "back".
-
+            // TODO: How we should back out from this state depends on other
+            // elements on screen.  If we tapped a stop (identify by X in
+            // bottom center), we should tap the X (though back gesture is also
+            // OK).  If we are still in the map (identify by pokeball in bottom
+            // center), we shouldn't do anything.  If we are in some other
+            // state, like we tapped a Pokemon, we should gesture "back".
+            // For now, and because these ideal checks would be complex, do
+            // nothing.
             return false
         } else if (initialDiscState == SpinnerDetector.SpinResult.PURPLE) {
             Log.w(TAG, "Disc not ready - scan again")
-
-            // FIXME: Tap the "X" instead
             tapperService.back()
-
             return false
         }
 
@@ -247,9 +246,7 @@ class AutomationEngine(
             lastToast?.show()
         }
 
-        // FIXME: Tap the "X" instead
         tapperService.back()
-
         return success
     }
 
