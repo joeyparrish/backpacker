@@ -231,7 +231,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyDebugExpanded(animated: Boolean) {
         binding.debugContent.visibility = if (debugExpanded) View.VISIBLE else View.GONE
-        val targetRotation = if (debugExpanded) 0f else 180f
+        val targetRotation = if (debugExpanded) 180f else 0f
         if (animated) {
             binding.ivDebugChevron.animate().rotation(targetRotation).setDuration(200).start()
         } else {
@@ -242,7 +242,7 @@ class MainActivity : AppCompatActivity() {
     private fun applySetupExpanded(animated: Boolean) {
         val expanded = setupExpanded ?: return
         binding.setupContent.visibility = if (expanded) View.VISIBLE else View.GONE
-        val targetRotation = if (expanded) 0f else 180f
+        val targetRotation = if (expanded) 180f else 0f
         if (animated) {
             binding.ivSetupChevron.animate().rotation(targetRotation).setDuration(200).start()
         } else {
