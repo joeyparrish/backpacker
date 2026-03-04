@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Compact gold version of the Pokéstop app icon.
+    Same paths as ic_launcher_foreground.xml shifted by (-29, -21) to a tight
+    50×63 viewport (content bounds of the original 108×108 adaptive-icon asset).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="50dp"
+    android:height="63dp"
+    android:viewportWidth="50"
+    android:viewportHeight="63">
+
+    <!-- Outer ring (annulus): outer r=25, inner r=19, centre (25,25) -->
+    <path
+        android:fillType="evenOdd"
+        android:fillColor="@color/gold"
+        android:pathData="
+            M 50,25 A 25,25 0 0 1 25,50 A 25,25 0 0 1 0,25
+                    A 25,25 0 0 1 25,0  A 25,25 0 0 1 50,25 Z
+            M 44,25 A 19,19 0 0 1 25,44 A 19,19 0 0 1 6,25
+                    A 19,19 0 0 1 25,6  A 19,19 0 0 1 44,25 Z" />
+
+    <!-- Inner disc: r=17, centre (25,25) -->
+    <path
+        android:fillColor="@color/gold"
+        android:pathData="
+            M 42,25 A 17,17 0 0 1 25,42 A 17,17 0 0 1 8,25
+                    A 17,17 0 0 1 25,8  A 17,17 0 0 1 42,25 Z" />
+
+    <!-- Pokéball horizontal divider: dark band 4dp tall at disc centre -->
+    <path
+        android:fillColor="#001830"
+        android:pathData="M 8.5,23 L 41.5,23 L 41.5,27 L 8.5,27 Z" />
+
+    <!-- Pokéball centre button: dark outer ring r=5.5 -->
+    <path
+        android:fillColor="#001830"
+        android:pathData="
+            M 30.5,25 A 5.5,5.5 0 0 1 25,30.5 A 5.5,5.5 0 0 1 19.5,25
+                       A 5.5,5.5 0 0 1 25,19.5 A 5.5,5.5 0 0 1 30.5,25 Z" />
+
+    <!-- Pokéball centre button: gold inner dot r=3 -->
+    <path
+        android:fillColor="@color/gold"
+        android:pathData="
+            M 28,25 A 3,3 0 0 1 25,28 A 3,3 0 0 1 22,25
+                    A 3,3 0 0 1 25,22 A 3,3 0 0 1 28,25 Z" />
+
+    <!-- Pole: 3dp wide, disc bottom (y=42) to base (y=59) -->
+    <path
+        android:fillColor="@color/gold"
+        android:pathData="M 23.5,42 L 26.5,42 L 26.5,59 L 23.5,59 Z" />
+
+    <!-- Base platform: 28dp wide, 4dp tall -->
+    <path
+        android:fillColor="@color/gold"
+        android:pathData="M 11,59 L 39,59 L 39,63 L 11,63 Z" />
+
+</vector>
