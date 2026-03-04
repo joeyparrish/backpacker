@@ -1,8 +1,8 @@
-# Backpacker — Architecture
+# Backpacker - Architecture
 
 "Backpacker" automates Pokéstop spinning in Pokémon GO. It runs as a background
 service, looks at the screen through Android's MediaProjection API, and injects
-gestures through an AccessibilityService — no root, no game file modification,
+gestures through an AccessibilityService - no root, no game file modification,
 no network interception.
 
 ---
@@ -27,22 +27,22 @@ no network interception.
 
 ```
 app/src/main/java/io/github/joeyparrish/backpacker/
-├── BackpackerApp.kt           — Application class: OpenCV init, notification channel
+├── BackpackerApp.kt           - Application class: OpenCV init, notification channel
 ├── service/
-│   ├── AutomationService.kt  — ForegroundService; owns MediaProjection lifecycle
-│   ├── TapperService.kt      — AccessibilityService; gesture dispatch + overlay windows
-│   └── ScreenshotService.kt  — MediaProjection wrapper; captures frames as OpenCV Mats
+│   ├── AutomationService.kt   - ForegroundService; owns MediaProjection lifecycle
+│   ├── TapperService.kt       - AccessibilityService; gesture dispatch + overlay windows
+│   └── ScreenshotService.kt   - MediaProjection wrapper; captures frames as OpenCV Mats
 ├── vision/
-│   ├── PokestopDetector.kt   — HSV mask + contour analysis → disc centroids
-│   └── SpinnerDetector.kt    — HoughCircles + annular colour mask → spinner state
+│   ├── PokestopDetector.kt    - HSV mask + contour analysis → disc centroids
+│   └── SpinnerDetector.kt     - HoughCircles + annular colour mask → spinner state
 ├── automation/
-│   └── AutomationEngine.kt  — Coroutine state machine; drives the full spin loop
+│   └── AutomationEngine.kt    - Coroutine state machine; drives the full spin loop
 ├── ui/
-│   ├── MainActivity.kt       — Permission onboarding; overlay + debug switches
-│   ├── OverlayView.kt        — Floating FAB: IDLE / HOUSE / CAR states
-│   └── DebugOverlayView.kt   — Full-screen debug overlay; bounding boxes + markers
+│   ├── MainActivity.kt        - Permission onboarding; overlay + debug switches
+│   ├── OverlayView.kt         - Floating FAB: IDLE / HOUSE / CAR states
+│   └── DebugOverlayView.kt    - Full-screen debug overlay; bounding boxes + markers
 └── util/
-    └── CoordinateTransform.kt — 720p ↔ device-pixel coordinate scaling
+    └── CoordinateTransform.kt - 720p ↔ device-pixel coordinate scaling
 ```
 
 ---
@@ -72,15 +72,15 @@ automation engine can translate 720p CV coordinates into actual touch positions.
 
 Provides three gesture primitives:
 
-- `tap(x, y)` — 50 ms point stroke
-- `swipe(x1, y1, x2, y2, durationMs)` — straight-line stroke; `suspend`; delays
+- `tap(x, y)` - 50 ms point stroke
+- `swipe(x1, y1, x2, y2, durationMs)` - straight-line stroke; `suspend`; delays
   for `durationMs` after dispatch so the coroutine waits for gesture completion
-- `back()` — `performGlobalAction(GLOBAL_ACTION_BACK)`
+- `back()` - `performGlobalAction(GLOBAL_ACTION_BACK)`
 
 Also owns two overlay windows:
 
-- **OverlayView** — draggable FAB, cycles IDLE → HOUSE → CAR → IDLE on tap
-- **DebugOverlayView** — full-screen transparent overlay; draws bounding boxes
+- **OverlayView** - draggable FAB, cycles IDLE → HOUSE → CAR → IDLE on tap
+- **DebugOverlayView** - full-screen transparent overlay; draws bounding boxes
   over detected disc positions for calibration
 
 Both use `TYPE_ACCESSIBILITY_OVERLAY` which requires no `SYSTEM_ALERT_WINDOW`
@@ -97,8 +97,8 @@ PREPARING → READY → RUNNING
 
 - **PREPARING**: service enters foreground before the consent dialog (Android 14
   requires this timing).
-- **READY**: consent granted; `ScreenshotService` and VirtualDisplay are live; no
-  capture loop yet.
+- **READY**: consent granted; `ScreenshotService` and VirtualDisplay are live;
+  no capture loop yet.
 - **RUNNING**: coroutine scope and `AutomationEngine` created; capture loop
   active.
 
@@ -112,47 +112,47 @@ alive so the user can resume without a new consent dialog.
 ```
 run()
 │
-├─ SETTLE_DELAY_MS (500ms) — wait for FAB/overlay transition to finish
+├─ SETTLE_DELAY_MS - wait for FAB/overlay transition to finish
 │
 ├─ [spinner debug mode] → one-shot capture, report disc state, auto-pause
 │
 └─ SCAN LOOP (until stopped)
     │
-    ├─ If screen off → sleep SCREEN_OFF_POLL_MS (5s) → repeat
+    ├─ If screen off → sleep SCREEN_OFF_POLL_MS → repeat
     │
     ├─ capture() → Mat (720p RGBA)
-    │   └─ If null → sleep CAPTURE_RETRY_MS (2s), retry
+    │   └─ If null → sleep CAPTURE_RETRY_MS, retry
     │
     ├─ PokestopDetector.detect(screenshot) → DetectionResult
     │   └─ If no passing discs → sleep scanIntervalMs → repeat
     │
-    └─ Pick one disc at random → spinDisc()
-        │
-        ├─ tap(centroid)
-        ├─ sleep OPEN_DELAY_MS (1s)  — detail view animation
-        │
-        ├─ checkDiscState() — initial check
-        │   ├─ null / ABSENT → bailed out or wrong tap target → return false
-        │   ├─ PURPLE → already spun → back(), return false
-        │   └─ CYAN → proceed
-        │
-        ├─ 10 × swipe(left→right, SWIPE_DURATION_MS=300ms)
-        │   (swipe() is suspend; each call waits for gesture completion)
-        ├─ sleep SPIN_RESULT_DELAY_MS (500ms)
-        │
-        ├─ checkDiscState() — final check
-        │   └─ success = (state != null && state != CYAN)
-        │
-        ├─ back()
-        ├─ if success → sessionSpins++, lifetime_spins++ (SharedPrefs)
-        └─ return success
+    ├─ Pick one disc at random → spinDisc()
+    │   │
+    │   ├─ tap(centroid)
+    │   ├─ sleep OPEN_DELAY_MS - detail view animation
+    │   │
+    │   ├─ checkDiscState() - initial check
+    │   │   ├─ null / ABSENT → bailed out or wrong tap target → return false
+    │   │   ├─ PURPLE → already spun → back(), return false
+    │   │   └─ CYAN → proceed
+    │   │
+    │   ├─ 10 × swipe(left→right, SWIPE_DURATION_MS)
+    │   │   (swipe() is suspend; each call waits for gesture completion)
+    │   ├─ sleep SPIN_RESULT_DELAY_MS
+    │   │
+    │   ├─ checkDiscState() - final check
+    │   │   └─ success = (state != null && state != CYAN)
+    │   │
+    │   ├─ back()
+    │   ├─ if success → sessionSpins++, lifetime_spins++ (SharedPrefs)
+    │   └─ return success
     │
-    ├─ If !success or multiple discs → thisLoopDelay = SCAN_IMMEDIATELY_MS (500ms)
+    ├─ If !success or multiple discs → thisLoopDelay = SCAN_IMMEDIATELY_MS
     └─ else → thisLoopDelay = scanIntervalMs
 
 Scan intervals:
-  HOUSE mode — 60s  (stationary)
-  CAR mode   —  5s  (driving)
+  HOUSE mode - slow (stationary)
+  CAR mode   - fast (driving)
 ```
 
 ---
@@ -176,11 +176,11 @@ height are unreliable.
 4. `Imgproc.findContours`
 5. Filter by bounding-box **height** only (50–110 px at 720p; observed range
    59–106 px). Width and area filters also applied but with generous thresholds.
-6. Compute centroid via image moments (not bounding-box centre — the disc image
+6. Compute centroid via image moments (not bounding-box centre - the disc image
    sits above the pole, so the bounding-box midpoint lands on the pole rather
    than the tappable disc).
 
-**Why not template matching:** The disc has no fixed shape — it varies
+**Why not template matching:** The disc has no fixed shape - it varies
 continuously with rotation angle. There is no single representative template.
 
 **Why not filter on area alone:** An edge-on disc is a tall thin sliver with
@@ -189,15 +189,15 @@ near-zero area. Height is the stable discriminant.
 ### Spinner State Detection (SpinnerDetector)
 
 After opening a stop, the large spinner ring is either:
-- **Cyan/blue** — ready to spin
-- **Purple** — already spun (cooldown)
-- **Absent** — circle not found (wrong screen, animation in progress)
+- **Cyan/blue** - ready to spin
+- **Purple** - already spun (cooldown)
+- **Absent** - circle not found (wrong screen, animation in progress)
 
 **Algorithm:**
 
 1. `Imgproc.cvtColor` RGBA → greyscale → `Imgproc.GaussianBlur`
-2. `Imgproc.HoughCircles` (HOUGH_GRADIENT) with radius constrained to 40–50% of
-   normalised width. This range comfortably captures the spinner ring while
+2. `Imgproc.HoughCircles` (`HOUGH_GRADIENT`) with radius constrained to 40–50%
+   of normalised width. This range comfortably captures the spinner ring while
    excluding the smaller circles that appear inside the disc photo.
 3. Select the detected circle closest to the screen centre.
 4. Derive inner radius = outerR × 0.90 (measured: 538/600 ≈ 0.897).
@@ -214,8 +214,8 @@ After opening a stop, the large spinner ring is either:
 centre of the spinner view is also coloured and could trigger false positives.
 The ring mask isolates the spinner band and ignores the interior.
 
-**Why HoughCircles instead of contour detection:** The ring is partially occluded
-by UI chrome (item reward names, HP bars). Hough voting is robust to partial
+**Why HoughCircles instead of contour detection:** The ring is partially
+occluded by UI chrome (item rewards, etc.). Hough voting is robust to partial
 occlusion; contour detection is not.
 
 ---
@@ -228,24 +228,24 @@ check immediately after the swipe, the animation may not have finished. Anything
 that is no longer cyan means the spin was triggered successfully, even if the
 purple state has not yet fully rendered.
 
-**10 rapid swipes per spin attempt:** Multiple swipes cost negligible extra time
-(~3s total at 300ms each) but substantially improve reliability. GPS jitter while
+**Spin by many rapid swipes, check state once after:** Multiple swipes cost
+negligible extra time, but substantially improve reliability. GPS jitter while
 driving can cause momentary range failures; multiple swipes mean at least some
-will register. Extra swipes after a successful spin accelerate the animation and
-leave the ring in a more stable state for the post-spin detector check.
+will register. Extra swipes after a successful spin accelerate the animation
+and leave the ring in a more stable state for the post-spin detector check.
 
 **No range pre-check:** If the stop is slightly out of range the spin will fail,
 which the engine detects via the `finalState != CYAN` check. Range failures and
 network failures are handled identically. Adding a range check would require
 parsing additional UI elements (distance badge) for no net gain.
 
-**HOUSE (60s) and CAR (5s) scan modes:** When stationary, re-scanning every
-second wastes CPU and battery — stops don't appear or disappear that fast. While
+**HOUSE (slow) and CAR (fast) scan modes:** When stationary, re-scanning every
+second wastes CPU and battery - stops don't appear or disappear that fast. While
 driving, new stops scroll into view every few seconds so a shorter interval is
 worthwhile.
 
-**Screen-off skip:** The VirtualDisplay continues compositing when the screen is
-off, but there is nothing useful to detect. Skipping CV work while
+**Screen-off skip:** The VirtualDisplay continues compositing when the screen
+is off, but there is nothing useful to detect. Skipping CV work while
 `!powerManager.isInteractive` reduces CPU load during pocket time.
 
 **720p VirtualDisplay:** Creating the VirtualDisplay at the normalised capture
@@ -258,8 +258,8 @@ freeing them per scan creates GC pressure and JNI malloc/free overhead. Instance
 fields in `PokestopDetector` and `SpinnerDetector` hold scratch Mats that are
 reused (cleared with `setTo(Scalar(0.0))`) across calls.
 
-**AccessibilityService for gestures:** `dispatchGesture` injects touches into any
-app with no root required and no hooking of the target process. The only
+**AccessibilityService for gestures:** `dispatchGesture` injects touches into
+any app with no root required and no hooking of the target process. The only
 requirement is that the user manually enables the service in Android Settings →
 Accessibility.
 
@@ -272,8 +272,8 @@ drops. Making `swipe` suspend ensures each swipe completes before the next.
 
 ## What Didn't Work
 
-**JitPack OpenCV (`iamareebjamal/opencv-android`):** All versions ≥ 4.3.0 fail to
-build on JitPack due to broken JNI packaging. Switched to the official
+**JitPack OpenCV (`iamareebjamal/opencv-android`):** All versions ≥ 4.3.0 fail
+to build on JitPack due to broken JNI packaging. Switched to the official
 `org.opencv:opencv:4.12.0` on Maven Central.
 
 **OpenCV < 4.12.0 on 16KB-page devices:** Android 15 devices require both (a)
@@ -286,19 +286,20 @@ alignment.
 Upgrading to AGP 8.3.2 resolved this; no `org.gradle.java.home` override needed.
 
 **`Activity.RESULT_OK = -1` as getIntExtra sentinel:** The service passes the
-MediaProjection result code via an Intent extra. Using -1 as a "not set" sentinel
-collides with `Activity.RESULT_OK`. Fixed by using `Int.MIN_VALUE`.
+MediaProjection result code via an Intent extra. Using -1 as a "not set"
+sentinel collides with `Activity.RESULT_OK`. Fixed by using `Int.MIN_VALUE`.
 
 **Center-first disc ordering:** Sorting detected discs by distance from screen
 centre before spinning seemed logical (the closest stop is most likely in range)
 but caused the engine to repeatedly attempt the same difficult stop instead of
-trying an easier nearby one. Replaced with random selection.
+trying an easier nearby one. Replaced with random selection and rescanning to
+handle movement (deliberate or drift) between spins.
 
-**The original retry loop structure:** The first `spinDisc()` implementation used
-a loop that checked disc state between each swipe and attempted to back out and
-re-enter if the state changed. This got confused about the UI state — it would
-back out to the map, detect a disc, tap it again, then try to back out of the
-game entirely. Replaced with the current single-check-before / single-check-after
+**The original retry loop structure:** The first `spinDisc()` implementation
+used a loop that checked disc state between each swipe and attempted to back
+out and re-enter if the state changed. This got out of sync with the actual UI.
+It would back out to the map, swipe the map, then try to back out of the game
+entirely. Replaced with the current single-check-before / single-check-after
 structure.
 
 **`isSpinSuccess() == PURPLE`:** Checking for the purple state explicitly caused
