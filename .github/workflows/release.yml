@@ -25,16 +25,15 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleRelease
 
       - name: Rename APK to include version tag
         run: |
-          VERSION="${GITHUB_REF_NAME}"
-          cp app/build/outputs/apk/debug/app-debug.apk \
-             "backpacker-${VERSION}.apk"
+          cp app/build/outputs/apk/release/app-release-unsigned.apk \
+             "backpacker-${{ github.ref_name }}.apk"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: backpacker-${{ github.ref_name }}.apk
-          generate_release_notes: true
+          generate_release_notes: false
