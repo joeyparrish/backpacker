@@ -324,7 +324,7 @@ class AutomationEngine(
         private const val SWIPE_DURATION_MS       =   300L  // swipe gesture length
         private const val NUM_SPIN_ATTEMPTS       =    10L  // spin this many times
         private const val SPIN_RESULT_DELAY_MS    =   500L  // delay before checking spin result
-        private const val SCAN_IMMEDIATELY_MS     =   500L  // scan right away
+        private const val SCAN_IMMEDIATELY_MS     = 1_500L  // scan "right away", but with time for the "back to map" animation to settle
 
         const val PREFS_NAME         = "backpacker_prefs"
         const val PREF_LIFETIME_SPINS = "lifetime_spins"
