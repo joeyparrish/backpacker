@@ -4,8 +4,9 @@ An Android app that automates Pokéstop spinning in Pokémon GO. It uses Android
 MediaProjection API to watch the screen and an AccessibilityService to inject
 swipe gestures — no root, no network interception, no game file modification.
 
-> **Note:** Automating game actions may violate Niantic's Terms of Service. Use
-> at your own risk.
+> [!WARNING]
+> Automating game actions may violate Niantic's Terms of Service.
+> Use at your own risk.
 
 ---
 
