@@ -22,6 +22,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import io.github.joeyparrish.backpacker.BuildConfig
 import io.github.joeyparrish.backpacker.R
 import io.github.joeyparrish.backpacker.automation.AutomationEngine
 import io.github.joeyparrish.backpacker.databinding.ActivityMainBinding
@@ -93,6 +94,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        binding.tvVersion.text = getString(R.string.version, BuildConfig.VERSION_NAME)
 
         binding.btnOpenAccessibility.setOnClickListener { openAccessibilitySettings() }
         binding.btnRequestNotification.setOnClickListener { requestNotificationPermission() }

@@ -190,5 +190,14 @@
             app:thumbTint="@color/switch_thumb_tint"
             app:trackTint="@color/switch_track_tint" />
 
+        <TextView
+            android:id="@+id/tvVersion"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:textAppearance="?attr/textAppearanceCaption"
+            android:alpha="0.5"
+            android:gravity="center" />
+
     </LinearLayout>
 </ScrollView>
