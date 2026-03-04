@@ -3,6 +3,22 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+fun gitVersionName(): String = try {
+    ProcessBuilder("git", "describe", "--tags", "--always")
+        .directory(rootDir)
+        .start()
+        .inputStream.bufferedReader().readLine()
+        ?.trim()?.removePrefix("v") ?: "0.0.0"
+} catch (e: Exception) { "0.0.0" }
+
+fun gitVersionCode(): Int = try {
+    ProcessBuilder("git", "rev-list", "--count", "HEAD")
+        .directory(rootDir)
+        .start()
+        .inputStream.bufferedReader().readLine()
+        ?.trim()?.toInt() ?: 1
+} catch (e: Exception) { 1 }
+
 android {
     namespace = "io.github.joeyparrish.backpacker"
     compileSdk = 35
@@ -11,8 +27,8 @@ android {
         applicationId = "io.github.joeyparrish.backpacker"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = gitVersionCode()
+        versionName = gitVersionName()
     }
 
     buildTypes {
