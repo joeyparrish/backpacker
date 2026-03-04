@@ -17,7 +17,7 @@ swipe gestures — no root, no network interception, no game file modification.
    access → Install unknown apps**) and allow installs from your browser or file
    manager.
 2. Download the latest `app-debug.apk` from the
-   [Releases](../../releases/latest) page.
+   [Releases](https://github.com/joeyparrish/backpacker/releases/latest) page.
 3. Open the downloaded file and tap **Install**.
 
 ### From Source
