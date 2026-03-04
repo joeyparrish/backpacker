@@ -39,7 +39,11 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 ## Setup
 
-Open **Backpacker** and work through the three setup steps shown on screen:
+Open **Backpacker**. The **Backpacker Setup** section at the top is expanded
+automatically when any step is incomplete (collapsed when all are done — tap
+the heading to toggle it).
+
+Work through the three setup steps:
 
 1. **Enable Gesture Service** — tap the button to open Accessibility Settings,
    find *Backpacker Gesture Service*, and enable it.
@@ -47,9 +51,9 @@ Open **Backpacker** and work through the three setup steps shown on screen:
 3. **Disable Battery Optimization** — prevents Android from killing the service
    while the screen is off.
 
-Once all steps are done, toggle **Overlay enabled**. A system dialog will ask
-for screen-capture permission — tap **Start now**. A small floating button will
-appear on screen.
+Once all steps are done, toggle **Overlay enabled** in the **Automation**
+section. A system dialog will ask for screen-capture permission — tap
+**Start now**. A small floating button will appear on screen.
 
 ---
 

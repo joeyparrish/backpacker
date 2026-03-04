@@ -17,6 +17,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -55,6 +56,9 @@ class MainActivity : AppCompatActivity() {
      * programmatically clear one switch while enabling the other.
      */
     private var updatingDebugSwitches = false
+
+    /** null = not yet initialised; set once on first updateStatus() call. */
+    private var setupExpanded: Boolean? = null
 
     private val mpLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -122,6 +126,11 @@ class MainActivity : AppCompatActivity() {
             }
             OverlayView.skipCarMode = checked || binding.switchDebugScan.isChecked
         }
+
+        binding.setupHeader.setOnClickListener {
+            setupExpanded = !(setupExpanded ?: true)
+            applySetupExpanded(animated = true)
+        }
     }
 
     override fun onResume() {
@@ -182,6 +191,11 @@ class MainActivity : AppCompatActivity() {
         val notifOk = hasNotificationPermission()
         val batteryOk = isBatteryOptimizationDisabled()
 
+        if (setupExpanded == null) {
+            setupExpanded = !(a11yOk && notifOk && batteryOk)
+            applySetupExpanded(animated = false)
+        }
+
         binding.tvAccessibilityStatus.text = if (a11yOk)
             getString(R.string.status_accessibility_ok)
         else
@@ -200,6 +214,17 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "Status — a11y=$a11yOk notif=$notifOk battery=$batteryOk " +
                 "overlayShown=${TapperService.isOverlayShown} " +
                 "ready=${AutomationService.isReady} running=${AutomationService.isRunning}")
+    }
+
+    private fun applySetupExpanded(animated: Boolean) {
+        val expanded = setupExpanded ?: return
+        binding.setupContent.visibility = if (expanded) View.VISIBLE else View.GONE
+        val targetRotation = if (expanded) 0f else 180f
+        if (animated) {
+            binding.ivSetupChevron.animate().rotation(targetRotation).setDuration(200).start()
+        } else {
+            binding.ivSetupChevron.rotation = targetRotation
+        }
     }
 
     private fun updateOverlaySwitch() {

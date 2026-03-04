@@ -20,4 +20,6 @@
     <string name="status_accessibility_ok">Gesture service: ENABLED</string>
     <string name="status_accessibility_missing">Gesture service: DISABLED</string>
     <string name="lifetime_spins">Lifetime spins: %1$d</string>
+    <string name="section_setup">Backpacker Setup</string>
+    <string name="section_automation">Automation</string>
 </resources>
