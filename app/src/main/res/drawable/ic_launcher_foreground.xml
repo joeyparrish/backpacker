@@ -1,14 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    App icon foreground: flat Pokéstop silhouette in cyan on transparent.
+    Adaptive-icon foreground layer.
 
-    Layout in 108×108 viewport (safe zone = 66 dp circle, r=33 from centre 54,54):
-      • Outer ring (annulus)  centre (54,46)  outer r=25  inner r=19
-      • Inner disc            centre (54,46)  r=17
-      • Pokéball divider      dark rect across disc mid-line (y 44–48)
-      • Centre button         dark circle r=5.5 + cyan dot r=3
-      • Pole                  thin rect (54±1.5, y 63–80)
-      • Base platform         wide rect (40–68, y 80–84)
+    Viewport: 108×108 dp (required by the adaptive-icon safe-zone spec).
+    Content:  pokestop_paths in 50×63 coordinate space, placed via a <group>
+              translate so the disc centre lands at (54, 46) — the same
+              position as the original hand-authored version.
+              translateX=29  translateY=21  →  centre=(29+25, 21+25)=(54,46) ✓
+
+    The path uses fillType="evenOdd" so Pokéball details are transparent
+    cutouts rather than explicit dark fills.  The black launcher background
+    (ic_launcher_background) shows through, reproducing the original look.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -16,55 +18,13 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!--
-        Outer ring: annulus drawn as two concentric circles combined in one
-        even-odd path.  The even-odd rule makes the inner circle a hole.
-        Outer r=25, inner r=19, centre (54,46).
-        Each circle is traced as four 90° clockwise arcs.
-    -->
-    <path
-        android:fillType="evenOdd"
-        android:fillColor="#17C8FF"
-        android:pathData="
-            M 79,46 A 25,25 0 0 1 54,71 A 25,25 0 0 1 29,46
-                    A 25,25 0 0 1 54,21 A 25,25 0 0 1 79,46 Z
-            M 73,46 A 19,19 0 0 1 54,65 A 19,19 0 0 1 35,46
-                    A 19,19 0 0 1 54,27 A 19,19 0 0 1 73,46 Z" />
-
-    <!-- Inner disc: filled circle r=17, centre (54,46). -->
-    <path
-        android:fillColor="#17C8FF"
-        android:pathData="
-            M 71,46 A 17,17 0 0 1 54,63 A 17,17 0 0 1 37,46
-                    A 17,17 0 0 1 54,29 A 17,17 0 0 1 71,46 Z" />
-
-    <!-- Pokéball horizontal divider: dark band 4 dp tall at disc centre. -->
-    <path
-        android:fillColor="#001830"
-        android:pathData="M 37.5,44 L 70.5,44 L 70.5,48 L 37.5,48 Z" />
-
-    <!-- Pokéball centre button – dark outer ring (r=5.5). -->
-    <path
-        android:fillColor="#001830"
-        android:pathData="
-            M 59.5,46 A 5.5,5.5 0 0 1 54,51.5 A 5.5,5.5 0 0 1 48.5,46
-                       A 5.5,5.5 0 0 1 54,40.5 A 5.5,5.5 0 0 1 59.5,46 Z" />
-
-    <!-- Pokéball centre button – cyan inner dot (r=3). -->
-    <path
-        android:fillColor="#17C8FF"
-        android:pathData="
-            M 57,46 A 3,3 0 0 1 54,49 A 3,3 0 0 1 51,46
-                    A 3,3 0 0 1 54,43 A 3,3 0 0 1 57,46 Z" />
-
-    <!-- Pole: 3 dp wide, connects disc bottom (y=63) to base (y=80). -->
-    <path
-        android:fillColor="#17C8FF"
-        android:pathData="M 52.5,63 L 55.5,63 L 55.5,80 L 52.5,80 Z" />
-
-    <!-- Base platform: 28 dp wide, 4 dp tall, centred on pole. -->
-    <path
-        android:fillColor="#17C8FF"
-        android:pathData="M 40,80 L 68,80 L 68,84 L 40,84 Z" />
+    <group
+        android:translateX="29"
+        android:translateY="21">
+        <path
+            android:fillType="evenOdd"
+            android:fillColor="#17C8FF"
+            android:pathData="@string/pokestop_paths" />
+    </group>
 
 </vector>

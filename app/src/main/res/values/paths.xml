@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Canonical Pokéstop icon path data in a 50×63 coordinate space.
+
+    Content is centred at (25, 25) — the disc centre.  The pole and base
+    extend downward to y=63.
+
+    All sub-paths are combined into a single compound evenOdd path so the
+    icon can be drawn as a single-colour shape with the Pokéball details
+    rendered as transparent cutouts rather than explicit dark-filled layers.
+    This lets android:tint (SRC_IN) recolour the whole icon in one pass while
+    preserving the detail holes.
+
+    Winding counts under the evenOdd rule:
+      Outside (r>25)              0  transparent
+      Outer ring band (r 19–25)   1  filled
+      Gap between ring and disc   2  transparent
+      Disc body (r<17, no detail) 3  filled
+      Pokéball stripe             4  transparent  (hole)
+      Button outer ring           4  transparent  (hole)
+      Button centre dot (r<3)     5  filled
+
+    Coordinate space:  viewportWidth="50"  viewportHeight="63"
+
+    To position this content within a larger viewport (e.g. the 108×108
+    adaptive-icon safe zone), wrap the path in a <group> with the
+    appropriate translateX / translateY transform.
+-->
+<resources>
+    <string name="pokestop_paths" translatable="false">
+        M 50,25 A 25,25 0 0 1 25,50 A 25,25 0 0 1  0,25 A 25,25 0 0 1 25, 0 A 25,25 0 0 1 50,25 Z
+        M 44,25 A 19,19 0 0 1 25,44 A 19,19 0 0 1  6,25 A 19,19 0 0 1 25, 6 A 19,19 0 0 1 44,25 Z
+        M 42,25 A 17,17 0 0 1 25,42 A 17,17 0 0 1  8,25 A 17,17 0 0 1 25, 8 A 17,17 0 0 1 42,25 Z
+        M  8.5,23 L 41.5,23 L 41.5,27 L  8.5,27 Z
+        M 30.5,25 A 5.5,5.5 0 0 1 25,30.5 A 5.5,5.5 0 0 1 19.5,25 A 5.5,5.5 0 0 1 25,19.5 A 5.5,5.5 0 0 1 30.5,25 Z
+        M 28,25 A 3,3 0 0 1 25,28 A 3,3 0 0 1 22,25 A 3,3 0 0 1 25,22 A 3,3 0 0 1 28,25 Z
+        M 23.5,42 L 26.5,42 L 26.5,59 L 23.5,59 Z
+        M 11,59 L 39,59 L 39,63 L 11,63 Z
+    </string>
+</resources>
