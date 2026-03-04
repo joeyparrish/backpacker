@@ -30,7 +30,8 @@ class AutomationEngine(
     private val screenshotService: ScreenshotService,
     private val tapperService: TapperService,
     private val context: Context,
-    private val scanIntervalMs: Long
+    private val scanIntervalMs: Long,
+    private val session: AutomationService.SessionState
 ) {
     @Volatile private var running = true
 
@@ -40,9 +41,6 @@ class AutomationEngine(
 
     // Cancelled before each new toast so rapid scans don't queue up or get rate-limited.
     private var lastToast: Toast? = null
-
-    private var sessionSpins = 0
-    private val sessionStartMs = System.currentTimeMillis()
 
     suspend fun run() {
         Log.i(TAG, "AutomationEngine starting")
@@ -222,7 +220,7 @@ class AutomationEngine(
 
         val succeededOrFailed = if (success) "succeeded" else "failed"
         if (success) {
-            sessionSpins++
+            session.spins++
             try {
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 val lifetime = prefs.getInt(PREF_LIFETIME_SPINS, 0) + 1
@@ -232,15 +230,15 @@ class AutomationEngine(
             }
         }
 
-        val elapsedHours = (System.currentTimeMillis() - sessionStartMs) / 3_600_000.0
-        val spinsPerHour = sessionSpins / elapsedHours
+        val elapsedHours = (System.currentTimeMillis() - session.startMs) / 3_600_000.0
+        val spinsPerHour = session.spins / elapsedHours
 
-        Log.i(TAG, "Spin $succeededOrFailed (final state: $finalDiscState, session total: $sessionSpins, %.1f/hr)".format(spinsPerHour))
+        Log.i(TAG, "Spin $succeededOrFailed (final state: $finalDiscState, session total: ${session.spins}, %.1f/hr)".format(spinsPerHour))
         withContext(Dispatchers.Main) {
             lastToast?.cancel()
             lastToast = Toast.makeText(
                 context,
-                "Spin $succeededOrFailed. $sessionSpins spins (%.1f/hr)".format(spinsPerHour),
+                "Spin $succeededOrFailed. ${session.spins} spins (%.1f/hr)".format(spinsPerHour),
                 Toast.LENGTH_SHORT
             )
             lastToast?.show()

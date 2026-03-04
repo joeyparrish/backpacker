@@ -49,11 +49,25 @@ class AutomationService : Service() {
     /** Scan frequency mode — declared at class level so it is resolvable as AutomationService.ScanMode. */
     enum class ScanMode { HOUSE, CAR }
 
+    /**
+     * Mutable session counters shared with [AutomationEngine].
+     * The service owns and resets this object; the engine writes through the reference directly.
+     * A new instance is created in [enterReadyState] so mode changes carry state forward while
+     * a fresh overlay enable starts from zero.
+     */
+    class SessionState {
+        var spins: Int = 0
+        val startMs: Long = System.currentTimeMillis()
+    }
+
     private var screenshotService: ScreenshotService? = null
 
     // Scope + engine are recreated on each ACTION_RUN so a cancelled scope is never reused.
     private var scope: CoroutineScope? = null
     private var automationEngine: AutomationEngine? = null
+
+    // Outlives individual engine instances; replaced only when the overlay is re-enabled.
+    private var session = SessionState()
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -132,6 +146,8 @@ class AutomationService : Service() {
      * the capture loop.  Switches the notification to the "overlay active" text.
      */
     private fun enterReadyState(resultCode: Int, resultData: Intent) {
+        session = SessionState()
+
         val mpManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         val mediaProjection = mpManager.getMediaProjection(resultCode, resultData)
 
@@ -172,7 +188,7 @@ class AutomationService : Service() {
         }
 
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        automationEngine = AutomationEngine(screenshotService!!, tapper, this, intervalMs)
+        automationEngine = AutomationEngine(screenshotService!!, tapper, this, intervalMs, session)
 
         scope!!.launch { automationEngine!!.run() }
 
