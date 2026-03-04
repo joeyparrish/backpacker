@@ -6,7 +6,7 @@ on:
       - "v*"
 
 jobs:
-  build-and-release:
+  release:
     runs-on: ubuntu-latest
     permissions:
       contents: write   # required to create a GitHub release
@@ -24,7 +24,7 @@ jobs:
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Build debug APK
+      - name: Build APK
         run: ./gradlew assembleRelease
 
       - name: Rename APK to include version tag
