@@ -1,9 +1,9 @@
 # Backpacker — Architecture
 
-"Pogo Backpacker" automates Pokéstop spinning in Pokémon GO. It runs as a
-background service, looks at the screen through Android's MediaProjection API,
-and injects gestures through an AccessibilityService — no root, no game file
-modification, no network interception.
+"Backpacker" automates Pokéstop spinning in Pokémon GO. It runs as a background
+service, looks at the screen through Android's MediaProjection API, and injects
+gestures through an AccessibilityService — no root, no game file modification,
+no network interception.
 
 ---
 
