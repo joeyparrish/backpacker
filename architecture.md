@@ -121,7 +121,7 @@ run()
     ├─ If screen off → sleep SCREEN_OFF_POLL_MS (5s) → repeat
     │
     ├─ capture() → Mat (720p RGBA)
-    │   └─ If null → sleep VD_RETRY_DELAY_MS (2s), retry
+    │   └─ If null → sleep CAPTURE_RETRY_MS (2s), retry
     │
     ├─ PokestopDetector.detect(screenshot) → DetectionResult
     │   └─ If no passing discs → sleep scanIntervalMs → repeat
