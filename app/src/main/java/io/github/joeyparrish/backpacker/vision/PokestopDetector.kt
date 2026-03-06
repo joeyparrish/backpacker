@@ -131,11 +131,15 @@ class PokestopDetector {
                 val mS = meanHsv.`val`[1].toInt()
                 val mV = meanHsv.`val`[2].toInt()
 
+                val discCenterY = bb.y + bb.height / 2
+                val bottomLimit = (normHeight * (1f - DISC_BOTTOM_EXCLUSION_FRAC)).toInt()
                 val verdict = when {
                     bb.height !in minDiscHeight..maxDiscHeight ->
                         "SKIP (h=${bb.height} not in $minDiscHeight..$maxDiscHeight)"
                     area < minArea ->
                         "SKIP (area=${area.toInt()} < $minArea)"
+                    discCenterY >= bottomLimit ->
+                        "SKIP (centerY=$discCenterY >= bottomLimit=$bottomLimit)"
                     else -> "PASS"
                 }
                 Log.d(TAG, "Contour @ (${bb.x},${bb.y}): " +
@@ -149,7 +153,9 @@ class PokestopDetector {
                 )
                 allBounds.add(bounds)
 
-                val passes = bb.height in minDiscHeight..maxDiscHeight && area >= minArea
+                val passes = bb.height in minDiscHeight..maxDiscHeight
+                        && area >= minArea
+                        && discCenterY < bottomLimit
                 if (!passes) {
                     rejectedBounds.add(bounds)
                 } else {
@@ -231,5 +237,9 @@ class PokestopDetector {
 
     companion object {
         private const val TAG = "Backpacker.PokestopDetector"
+
+        // Discs whose centre falls in the bottom fraction of the screen are excluded —
+        // tapping them risks hitting game UI elements (pokeball bar, etc.).
+        private const val DISC_BOTTOM_EXCLUSION_FRAC = 0.15f
     }
 }
