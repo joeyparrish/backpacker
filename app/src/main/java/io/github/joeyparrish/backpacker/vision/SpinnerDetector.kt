@@ -42,12 +42,12 @@ class SpinnerDetector {
     enum class SpinResult { CYAN, PURPLE, ABSENT }
 
     /** HSV bounds for the spun (purple) colour. */
-    private val spunHsvLower = Scalar(120.0, 100.0,  80.0)
-    private val spunHsvUpper = Scalar(160.0, 255.0, 255.0)
+    private val spunHsvLower = Scalar(120.0,  75.0, 165.0)
+    private val spunHsvUpper = Scalar(155.0, 160.0, 255.0)
 
     /** HSV bounds for the ready-to-spin (cyan/blue) colour. */
-    private val cyanHsvLower = Scalar( 85.0, 100.0, 100.0)
-    private val cyanHsvUpper = Scalar(130.0, 255.0, 255.0)
+    private val cyanHsvLower = Scalar( 90.0, 175.0, 155.0)
+    private val cyanHsvUpper = Scalar(115.0, 240.0, 255.0)
 
     // Pre-allocated scratch Mats — reused across detectState() calls.
     private val hsv       = Mat()
@@ -196,11 +196,11 @@ class SpinnerDetector {
         //   outer diameter: 87.7% of width  → radius ≈ 43.85%
         //   inner diameter: 78.7% of width  → radius ≈ 39.35%
         private const val RING_CENTER_X         = 0.500
-        private const val RING_CENTER_Y         = 0.489
+        private const val RING_CENTER_Y         = 0.480
         private const val RING_OUTER_RADIUS_FRAC = 0.4385
         private const val RING_INNER_RADIUS_FRAC = 0.3935
 
         // Minimum fraction of ring pixels that must match a colour to report that state.
-        private const val RING_DETECT_THRESHOLD = 0.20f
+        private const val RING_DETECT_THRESHOLD = 0.70f
     }
 }
