@@ -135,8 +135,9 @@ class TapperService : AccessibilityService() {
         overlayView?.setState(OverlayView.State.IDLE)
     }
 
-    /** Display a vision debug bitmap fullscreen (tap to dismiss). */
+    /** Display a vision debug bitmap fullscreen (tap to dismiss). Resets FAB to IDLE. */
     fun showDebugImage(bitmap: Bitmap) {
+        overlayView?.setState(OverlayView.State.IDLE)
         visionDebugView?.show(bitmap)
     }
 

@@ -59,6 +59,10 @@ class SpinnerDetector {
     private var ringMask   = Mat()
     private var ringPixels = 0f
 
+    // Last-computed ratios from detectState(); read by visualize() to draw the text overlay.
+    private var lastPurpleRatio = 0f
+    private var lastCyanRatio   = 0f
+
     /**
      * Detect the state of the spinner ring.
      * Returns [SpinResult.PURPLE] if spun, [SpinResult.CYAN] if ready, [SpinResult.ABSENT] otherwise.
@@ -95,13 +99,18 @@ class SpinnerDetector {
         Core.inRange(hsv, spunHsvLower, spunHsvUpper, colorMask)
         Core.bitwise_and(colorMask, ringMask, combined)
         val purpleRatio = Core.countNonZero(combined) / ringPixels
+        lastPurpleRatio = purpleRatio
         Log.d(TAG, "Purple ring ratio: $purpleRatio")
-        if (purpleRatio > RING_DETECT_THRESHOLD) return SpinResult.PURPLE
+        if (purpleRatio > RING_DETECT_THRESHOLD) {
+            lastCyanRatio = 0f
+            return SpinResult.PURPLE
+        }
 
         // Check cyan (ready to spin).
         Core.inRange(hsv, cyanHsvLower, cyanHsvUpper, colorMask)
         Core.bitwise_and(colorMask, ringMask, combined)
         val cyanRatio = Core.countNonZero(combined) / ringPixels
+        lastCyanRatio = cyanRatio
         Log.d(TAG, "Cyan ring ratio: $cyanRatio")
         if (cyanRatio > RING_DETECT_THRESHOLD) return SpinResult.CYAN
 
@@ -139,6 +148,25 @@ class SpinnerDetector {
             Imgproc.circle(viz, center, outerR, white, 3)
             Imgproc.circle(viz, center, innerR, white, 3)
         }
+
+        // Draw ratio text at bottom in white on a black box.
+        val text = "cyan=%.1f%%  purple=%.1f%%".format(lastCyanRatio * 100f, lastPurpleRatio * 100f)
+        val fontFace  = Imgproc.FONT_HERSHEY_SIMPLEX
+        val fontScale = 1.2
+        val fontThick = 2
+        val baseLine  = IntArray(1)
+        val textSize  = Imgproc.getTextSize(text, fontFace, fontScale, fontThick, baseLine)
+        val pad       = 12
+        val textX     = pad
+        val textY     = h - pad - baseLine[0]
+        val boxTop    = h - textSize.height.toInt() - baseLine[0] - pad * 2
+        Imgproc.rectangle(viz,
+            Point(0.0, boxTop.toDouble()),
+            Point((textSize.width + pad * 2).toDouble(), h.toDouble()),
+            Scalar(0.0, 0.0, 0.0, 200.0), -1)
+        Imgproc.putText(viz, text,
+            Point(textX.toDouble(), textY.toDouble()),
+            fontFace, fontScale, Scalar(255.0, 255.0, 255.0, 255.0), fontThick)
 
         val bitmap = Bitmap.createBitmap(viz.cols(), viz.rows(), Bitmap.Config.ARGB_8888)
         Utils.matToBitmap(viz, bitmap)
