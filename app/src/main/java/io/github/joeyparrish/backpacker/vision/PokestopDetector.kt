@@ -39,23 +39,15 @@ import org.opencv.imgproc.Imgproc
 class PokestopDetector {
 
     // HSV lower/upper bounds for the cyan disc colour (OpenCV: H 0-180, S/V 0-255)
-    // Observed mean hues: 92 - 99
-    // Observed mean saturations: 163 - 182
-    // Observed mean values: 232 - 242
     // NOTE: Having a wider color range can result in more pixels being
     // included in a blob, which can result in a greater height or area
     // observed.
-    private val hsvLower = Scalar( 85.0, 155.0, 190.0)
+    private val hsvLower = Scalar( 85.0, 150.0, 185.0)
     private val hsvUpper = Scalar(105.0, 225.0, 255.0)
 
     // Min/max bounding-box height (720p px) for a valid disc contour.
-    // Observed heights: 59 - 106
-    private val minDiscHeight = 50
+    private val minDiscHeight = 75
     private val maxDiscHeight = 110
-
-    // Min contour area (720p px²). Filters small noise that passes the height check.
-    // Observed areas: 691 - 2874
-    private val minArea = 650
 
     private val morphKernelSize = Size(5.0, 5.0)
 
@@ -136,8 +128,6 @@ class PokestopDetector {
                 val verdict = when {
                     bb.height !in minDiscHeight..maxDiscHeight ->
                         "SKIP (h=${bb.height} not in $minDiscHeight..$maxDiscHeight)"
-                    area < minArea ->
-                        "SKIP (area=${area.toInt()} < $minArea)"
                     discCenterY >= bottomLimit ->
                         "SKIP (centerY=$discCenterY >= bottomLimit=$bottomLimit)"
                     else -> "PASS"
@@ -154,7 +144,6 @@ class PokestopDetector {
                 allBounds.add(bounds)
 
                 val passes = bb.height in minDiscHeight..maxDiscHeight
-                        && area >= minArea
                         && discCenterY < bottomLimit
                 if (!passes) {
                     rejectedBounds.add(bounds)
