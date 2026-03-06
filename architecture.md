@@ -33,14 +33,14 @@ app/src/main/java/io/github/joeyparrish/backpacker/
 │   ├── TapperService.kt       - AccessibilityService; gesture dispatch + overlay windows
 │   └── ScreenshotService.kt   - MediaProjection wrapper; captures frames as OpenCV Mats
 ├── vision/
-│   ├── PokestopDetector.kt    - HSV mask + contour analysis → disc centroids
-│   └── SpinnerDetector.kt     - HoughCircles + annular colour mask → spinner state
+│   ├── PokestopDetector.kt    - HSV mask + contour analysis → disc centroids; visualize() for debug
+│   └── SpinnerDetector.kt     - Fixed-geometry annular ring mask → spinner state; visualize() for debug
 ├── automation/
 │   └── AutomationEngine.kt    - Coroutine state machine; drives the full spin loop
 ├── ui/
 │   ├── MainActivity.kt        - Collapsible Setup / Automation / Debug sections; app header; version display; overlay + debug switches
 │   ├── OverlayView.kt         - Floating FAB: IDLE / HOUSE / CAR states
-│   └── DebugOverlayView.kt    - Full-screen debug overlay; bounding boxes + markers
+│   └── VisionDebugView.kt     - Full-screen tap-to-dismiss Bitmap overlay for vision debug
 └── util/
     └── CoordinateTransform.kt - 720p ↔ device-pixel coordinate scaling
 ```
@@ -195,28 +195,26 @@ After opening a stop, the large spinner ring is either:
 
 **Algorithm:**
 
-1. `Imgproc.cvtColor` RGBA → greyscale → `Imgproc.GaussianBlur`
-2. `Imgproc.HoughCircles` (`HOUGH_GRADIENT`) with radius constrained to 40–50%
-   of normalised width. This range comfortably captures the spinner ring while
-   excluding the smaller circles that appear inside the disc photo.
-3. Select the detected circle closest to the screen centre.
-4. Derive inner radius = outerR × 0.90 (measured: 538/600 ≈ 0.897).
-5. Build an annular mask (outer filled circle minus inner filled circle).
-6. AND the ring mask against purple / cyan HSV masks in turn; report the colour
-   whose ring-pixel fraction exceeds 20%.
+1. Convert RGBA → HSV.
+2. Build a fixed-geometry annular mask over the known spinner ring position
+   (defined as fractions of frame dimensions; computed once on first call and
+   reused). Center: 50% x, 48.9% y. Outer radius: 43.85% of width. Inner
+   radius: 39.35% of width.
+3. AND the ring mask against purple / cyan HSV colour masks in turn.
+4. Report the colour whose ring-pixel fraction exceeds 20%. If neither, ABSENT.
 
-**Calibrated values (684px-wide device, normalised to 720px):**
-- Outer radius ≈ 316 px (43.9% of width)
+**Calibrated values:**
+- Outer radius: 43.85% of width; inner: 39.35%
 - Purple HSV: H=120–160, S=100–255, V=80–255
 - Cyan HSV: H=85–130, S=100–255, V=100–255
+
+**Why a fixed mask instead of HoughCircles:** HoughCircles sometimes found
+circles on the map when the detail view was not open, causing false spins.
+A fixed-geometry mask eliminates this failure mode entirely and is faster.
 
 **Why an annular mask instead of a full-circle or ROI:** The disc photo in the
 centre of the spinner view is also coloured and could trigger false positives.
 The ring mask isolates the spinner band and ignores the interior.
-
-**Why HoughCircles instead of contour detection:** The ring is partially
-occluded by UI chrome (item rewards, etc.). Hough voting is robust to partial
-occlusion; contour detection is not.
 
 ---
 
@@ -316,3 +314,9 @@ with `ContextThemeWrapper(context, R.style.Theme_Backpacker)` before inflating.
 content area starts below the status bar even with `FLAG_LAYOUT_IN_SCREEN`. The
 `VirtualDisplay` captures from physical y=0. Debug marker positions were
 misaligned until the canvas was translated up by the status bar height.
+
+**HoughCircles for spinner detection:** HoughCircles found circles on the map
+when the detail view was not open, causing the engine to swipe the map. Replaced
+with a fixed-geometry annular ring mask (fractions of frame dimensions) that
+only examines the known spinner position, eliminating the false-positive failure
+mode entirely.
