@@ -7,49 +7,68 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.util.Log
-import android.view.Gravity
+import android.view.KeyEvent
 import android.view.WindowManager
 import android.view.WindowManager.LayoutParams
+import android.widget.FrameLayout
 import android.widget.ImageView
 
 /**
- * WindowManager overlay that displays a processed vision debug bitmap and dismisses on tap.
+ * Fullscreen WindowManager overlay that displays a processed vision debug bitmap.
  *
- * Used by both stop-detection debug (cyan mask + bounding boxes painted on the
- * 720p screenshot) and spinner debug (ring mask painted on the screenshot).
+ * Tap anywhere or use the back gesture to dismiss.
  *
- * The image fills the full screen width, maintains its aspect ratio, and is
- * gravity-anchored to the bottom of the screen.  [show] can be called repeatedly
- * to replace the current image (e.g. before/after a swipe in spinner debug mode).
+ * The overlay takes input focus (no FLAG_NOT_FOCUSABLE) so that back gestures are
+ * consumed by the overlay rather than falling through to the game underneath.
+ * The container intercepts KEYCODE_BACK to dismiss; tap is handled by the ImageView.
  */
 class VisionDebugView(context: Context) {
 
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
     private val imageView = ImageView(context).apply {
-        adjustViewBounds = true
         scaleType = ImageView.ScaleType.FIT_XY
         setOnClickListener { hide() }
     }
 
-    private var isAttached = false
-
-    private val layoutParams = LayoutParams(
-        LayoutParams.MATCH_PARENT,
-        LayoutParams.WRAP_CONTENT,
-        LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-        LayoutParams.FLAG_NOT_FOCUSABLE or LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-        PixelFormat.TRANSLUCENT
-    ).apply {
-        gravity = Gravity.BOTTOM
+    // FrameLayout wrapper that intercepts the back key so it dismisses the overlay
+    // rather than falling through to the underlying app.
+    private val container = object : FrameLayout(context) {
+        override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+            if (event.keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
+                hide()
+                return true
+            }
+            return super.dispatchKeyEvent(event)
+        }
+    }.also { fl ->
+        fl.isFocusable = true
+        fl.isFocusableInTouchMode = true
+        fl.addView(imageView, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
     }
 
-    /** Display [bitmap] full-screen.  Replaces any previously shown bitmap. */
+    private var isAttached = false
+
+    // FLAG_NOT_FOCUSABLE is intentionally omitted so the window captures key events
+    // (back button / back gesture) instead of passing them to the game.
+    private val layoutParams = LayoutParams(
+        LayoutParams.MATCH_PARENT,
+        LayoutParams.MATCH_PARENT,
+        LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+        LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+        PixelFormat.TRANSLUCENT
+    )
+
+    /** Display [bitmap] fullscreen.  Replaces any previously shown bitmap. */
     fun show(bitmap: Bitmap) {
         imageView.setImageBitmap(bitmap)
         if (!isAttached) {
             try {
-                windowManager.addView(imageView, layoutParams)
+                windowManager.addView(container, layoutParams)
+                container.requestFocus()
                 isAttached = true
             } catch (e: Exception) {
                 Log.e(TAG, "addView: $e")
@@ -61,7 +80,7 @@ class VisionDebugView(context: Context) {
     fun hide() {
         if (isAttached) {
             try {
-                windowManager.removeView(imageView)
+                windowManager.removeView(container)
             } catch (e: Exception) {
                 Log.w(TAG, "removeView: $e")
             }
