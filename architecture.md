@@ -171,11 +171,13 @@ height are unreliable.
 
 1. Convert RGBA → HSV (`Imgproc.cvtColor`)
 2. `Core.inRange` with a cyan HSV mask
-   - Calibrated: H=85–105, S=155–255, V=225–255
+   - Calibrated: H=85–105, S=150–225, V=185–255
 3. Morphological close (5×5 kernel) to fill small gaps in the mask
 4. `Imgproc.findContours`
-5. Filter by bounding-box **height** only (50–110 px at 720p; observed range
-   59–106 px). Width and area filters also applied but with generous thresholds.
+5. Filter contours:
+   - Bounding-box **height** 75–110 px at 720p
+   - Bounding-box centre Y must be in the top 85% of the frame (bottom 15%
+     excluded — tapping there risks hitting game UI elements like the pokeball bar)
 6. Compute centroid via image moments (not bounding-box centre - the disc image
    sits above the pole, so the bounding-box midpoint lands on the pole rather
    than the tappable disc).
@@ -198,15 +200,16 @@ After opening a stop, the large spinner ring is either:
 1. Convert RGBA → HSV.
 2. Build a fixed-geometry annular mask over the known spinner ring position
    (defined as fractions of frame dimensions; computed once on first call and
-   reused). Center: 50% x, 48.9% y. Outer radius: 43.85% of width. Inner
+   reused). Center: 50% x, 48.0% y. Outer radius: 43.85% of width. Inner
    radius: 39.35% of width.
 3. AND the ring mask against purple / cyan HSV colour masks in turn.
-4. Report the colour whose ring-pixel fraction exceeds 20%. If neither, ABSENT.
+4. Report the colour whose ring-pixel fraction exceeds 70%. If neither, ABSENT.
 
 **Calibrated values:**
 - Outer radius: 43.85% of width; inner: 39.35%
-- Purple HSV: H=120–160, S=100–255, V=80–255
-- Cyan HSV: H=85–130, S=100–255, V=100–255
+- Purple HSV: H=120–155, S=75–160, V=165–255
+- Cyan HSV: H=90–115, S=175–240, V=155–255
+- Detection threshold: 70% of ring pixels must match
 
 **Why a fixed mask instead of HoughCircles:** HoughCircles sometimes found
 circles on the map when the detail view was not open, causing false spins.
@@ -312,8 +315,15 @@ with `ContextThemeWrapper(context, R.style.Theme_Backpacker)` before inflating.
 
 **`TYPE_ACCESSIBILITY_OVERLAY` Y-coordinate offset:** The overlay window's
 content area starts below the status bar even with `FLAG_LAYOUT_IN_SCREEN`. The
-`VirtualDisplay` captures from physical y=0. Debug marker positions were
-misaligned until the canvas was translated up by the status bar height.
+`VirtualDisplay` captures from physical y=0. This was not a problem once the
+debug overlay switched to a full-screen `MATCH_PARENT × MATCH_PARENT` window
+with `FIT_XY` scaling — the image fills the window and the slight offset is
+imperceptible for debug use.
+
+**`FLAG_NOT_FOCUSABLE` leaks back gesture:** Overlay windows using
+`FLAG_NOT_FOCUSABLE` do not receive key events, so back button / swipe-from-edge
+falls through to the underlying app. Fixed in `VisionDebugView` by omitting
+the flag and using a `FrameLayout` container that intercepts `KEYCODE_BACK`.
 
 **HoughCircles for spinner detection:** HoughCircles found circles on the map
 when the detail view was not open, causing the engine to swipe the map. Replaced
