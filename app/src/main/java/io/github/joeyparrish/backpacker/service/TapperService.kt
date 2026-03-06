@@ -5,12 +5,12 @@ package io.github.joeyparrish.backpacker.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.graphics.Bitmap
 import android.graphics.Path
-import android.graphics.RectF
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
-import io.github.joeyparrish.backpacker.ui.DebugOverlayView
 import io.github.joeyparrish.backpacker.ui.OverlayView
+import io.github.joeyparrish.backpacker.ui.VisionDebugView
 import kotlinx.coroutines.delay
 
 /**
@@ -27,7 +27,7 @@ import kotlinx.coroutines.delay
 class TapperService : AccessibilityService() {
 
     private var overlayView: OverlayView? = null
-    private var debugOverlayView: DebugOverlayView? = null
+    private var visionDebugView: VisionDebugView? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -39,7 +39,7 @@ class TapperService : AccessibilityService() {
         // has been granted by the user in MainActivity.
         try {
             overlayView = OverlayView(this) { state -> handleToggle(state) }
-            debugOverlayView = DebugOverlayView(this)
+            visionDebugView = VisionDebugView(this)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create overlay: $e")
         }
@@ -55,9 +55,9 @@ class TapperService : AccessibilityService() {
 
     override fun onDestroy() {
         try { overlayView?.hide() } catch (e: Exception) { Log.w(TAG, "hide overlay: $e") }
-        try { debugOverlayView?.hide() } catch (e: Exception) { Log.w(TAG, "hide debug overlay: $e") }
+        try { visionDebugView?.hide() } catch (e: Exception) { Log.w(TAG, "hide vision debug: $e") }
         overlayView = null
-        debugOverlayView = null
+        visionDebugView = null
         isOverlayShown = false
         instance = null
         Log.i(TAG, "TapperService destroyed")
@@ -77,6 +77,7 @@ class TapperService : AccessibilityService() {
 
     fun hideOverlay() {
         overlayView?.hide()
+        visionDebugView?.hide()
         isOverlayShown = false
         Log.i(TAG, "Overlay hidden")
     }
@@ -134,9 +135,9 @@ class TapperService : AccessibilityService() {
         overlayView?.setState(OverlayView.State.IDLE)
     }
 
-    /** Show debug bounding boxes (device pixels) for 2 seconds. */
-    fun showDebugMarkers(passedBounds: List<RectF>, rejectedBounds: List<RectF>) {
-        debugOverlayView?.showMarkers(passedBounds, rejectedBounds)
+    /** Display a vision debug bitmap fullscreen (tap to dismiss). */
+    fun showDebugImage(bitmap: Bitmap) {
+        visionDebugView?.show(bitmap)
     }
 
     companion object {

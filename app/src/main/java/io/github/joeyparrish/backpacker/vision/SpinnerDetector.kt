@@ -3,7 +3,9 @@
 
 package io.github.joeyparrish.backpacker.vision
 
+import android.graphics.Bitmap
 import android.util.Log
+import org.opencv.android.Utils
 import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
@@ -104,6 +106,44 @@ class SpinnerDetector {
         if (cyanRatio > RING_DETECT_THRESHOLD) return SpinResult.CYAN
 
         return SpinResult.ABSENT
+    }
+
+    /**
+     * Produce a debug visualization of the spinner ring region.
+     * Must be called after [detectState] (which builds [ringMask]) and before
+     * [screenshot] is released.
+     *
+     * Pixels inside the ring mask are shown in their original colour; all other
+     * pixels are greyscaled.  White circles mark the inner and outer ring boundaries.
+     */
+    fun visualize(screenshot: Mat): Bitmap {
+        val w = screenshot.cols()
+        val h = screenshot.rows()
+
+        val gray1 = Mat()
+        val gray4 = Mat()
+        Imgproc.cvtColor(screenshot, gray1, Imgproc.COLOR_RGBA2GRAY)
+        Imgproc.cvtColor(gray1, gray4, Imgproc.COLOR_GRAY2RGBA)
+        gray1.release()
+
+        val viz = gray4.clone()
+        gray4.release()
+
+        if (!ringMask.empty()) {
+            screenshot.copyTo(viz, ringMask)
+
+            val center = Point(w * RING_CENTER_X, h * RING_CENTER_Y)
+            val outerR = (w * RING_OUTER_RADIUS_FRAC).toInt()
+            val innerR = (w * RING_INNER_RADIUS_FRAC).toInt()
+            val white  = Scalar(255.0, 255.0, 255.0, 255.0)
+            Imgproc.circle(viz, center, outerR, white, 3)
+            Imgproc.circle(viz, center, innerR, white, 3)
+        }
+
+        val bitmap = Bitmap.createBitmap(viz.cols(), viz.rows(), Bitmap.Config.ARGB_8888)
+        Utils.matToBitmap(viz, bitmap)
+        viz.release()
+        return bitmap
     }
 
     /** Release all pre-allocated Mats. Call when the detector is no longer needed. */

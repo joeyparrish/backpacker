@@ -3,13 +3,16 @@
 
 package io.github.joeyparrish.backpacker.vision
 
+import android.graphics.Bitmap
 import android.graphics.PointF
 import android.graphics.RectF
 import android.util.Log
+import org.opencv.android.Utils
 import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint
+import org.opencv.core.Point
 import org.opencv.core.Rect
 import org.opencv.core.Scalar
 import org.opencv.core.Size
@@ -169,6 +172,51 @@ class PokestopDetector {
 
         Log.d(TAG, "Detected ${detections.size} Pokéstop disc(s) (of ${contours.size} total contours)")
         return DetectionResult(detections, allBounds, rejectedBounds)
+    }
+
+    /**
+     * Produce a debug visualization of the last [detect] result.
+     * Must be called before [screenshot] is released.
+     * The [mask] field is populated by [detect] and reused here.
+     *
+     * Pixels that matched the cyan HSV range are shown in their original colour;
+     * all other pixels are greyscaled.  Yellow boxes mark passing contours,
+     * red boxes mark rejected ones.
+     */
+    fun visualize(screenshot: Mat, result: DetectionResult): Bitmap {
+        val gray1 = Mat()
+        val gray4 = Mat()
+        Imgproc.cvtColor(screenshot, gray1, Imgproc.COLOR_RGBA2GRAY)
+        Imgproc.cvtColor(gray1, gray4, Imgproc.COLOR_GRAY2RGBA)
+        gray1.release()
+
+        // Start with a fully-greyscale copy, then paint colour back where the mask is set.
+        val viz = gray4.clone()
+        gray4.release()
+        screenshot.copyTo(viz, mask)
+
+        val thickness = 3
+        for (disc in result.passed) {
+            Imgproc.rectangle(
+                viz,
+                Point(disc.bounds.left.toDouble(), disc.bounds.top.toDouble()),
+                Point(disc.bounds.right.toDouble(), disc.bounds.bottom.toDouble()),
+                Scalar(255.0, 255.0, 0.0, 255.0), thickness
+            )
+        }
+        for (bounds in result.rejectedBounds) {
+            Imgproc.rectangle(
+                viz,
+                Point(bounds.left.toDouble(), bounds.top.toDouble()),
+                Point(bounds.right.toDouble(), bounds.bottom.toDouble()),
+                Scalar(255.0, 0.0, 0.0, 255.0), thickness
+            )
+        }
+
+        val bitmap = Bitmap.createBitmap(viz.cols(), viz.rows(), Bitmap.Config.ARGB_8888)
+        Utils.matToBitmap(viz, bitmap)
+        viz.release()
+        return bitmap
     }
 
     /** Release all pre-allocated Mats. Call when the detector is no longer needed. */

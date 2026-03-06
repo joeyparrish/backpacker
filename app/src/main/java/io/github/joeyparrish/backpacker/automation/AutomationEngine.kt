@@ -4,7 +4,7 @@
 package io.github.joeyparrish.backpacker.automation
 
 import android.content.Context
-import android.graphics.RectF
+import android.graphics.Bitmap
 import android.os.PowerManager
 import android.util.Log
 import android.widget.Toast
@@ -99,6 +99,8 @@ class AutomationEngine(
         val w = screenshotService.deviceWidth
         val h = screenshotService.deviceHeight
         val result = pokestopDetector.detect(screenshot)
+        // Generate debug bitmap before releasing screenshot (debug mode only).
+        val debugBitmap = if (debugScan) pokestopDetector.visualize(screenshot, result) else null
         screenshot.release()
         val t2 = System.currentTimeMillis()
         Log.d(TAG, "perf: detect=${t2 - t1}ms  stops=${result.passed.size}")
@@ -108,22 +110,11 @@ class AutomationEngine(
         var thisLoopDelayMs = scanIntervalMs
 
         if (debugScan) {
-            fun RectF.toDevice() = RectF(
-                CoordinateTransform.toDeviceX(left, w),
-                CoordinateTransform.toDeviceY(top, w),
-                CoordinateTransform.toDeviceX(right, w),
-                CoordinateTransform.toDeviceY(bottom, w)
-            )
-
-            // Passed contours get a yellow box; rejected contours get a red box.
-            val devicePassedBounds = result.passed.map { it.bounds.toDevice() }
-            val deviceRejectedBounds = result.rejectedBounds.map { it.toDevice() }
-
             withContext(Dispatchers.Main) {
                 lastToast?.cancel()
                 lastToast = Toast.makeText(context, "Stops: ${result.passed.size}", Toast.LENGTH_SHORT)
                 lastToast?.show()
-                tapperService.showDebugMarkers(devicePassedBounds, deviceRejectedBounds)
+                tapperService.showDebugImage(debugBitmap!!)
             }
         } else {
             if (result.passed.isEmpty()) {
@@ -250,13 +241,29 @@ class AutomationEngine(
 
     /**
      * One-shot spinner debug check. Captures a screenshot, runs [SpinnerDetector.detectState],
-     * and shows a toast reporting whether the circle is cyan, purple, or absent.
-     * If cyan, performs a swipe and then re-checks the result.
+     * shows a visualization overlay and a toast reporting the state.
+     * If cyan, performs a swipe, re-checks, and updates the visualization.
      * Caller sends AutomationService.pause() afterward to reset FAB and service state.
      */
     private suspend fun runSpinnerDebugCheck() {
         Log.d(TAG, "Spinner debug: capturing screenshot")
-        val beforeState = checkDiscState()
+
+        val beforeShot = screenshotService.capture()
+        if (beforeShot == null) {
+            Log.w(TAG, "Spinner debug: screenshot failed")
+            withContext(Dispatchers.Main) {
+                lastToast?.cancel()
+                lastToast = Toast.makeText(context, "Screenshot failed", Toast.LENGTH_LONG)
+                lastToast?.show()
+            }
+            return
+        }
+
+        val beforeState = spinnerDetector.detectState(beforeShot)
+        val beforeBitmap: Bitmap = spinnerDetector.visualize(beforeShot)
+        beforeShot.release()
+
+        withContext(Dispatchers.Main) { tapperService.showDebugImage(beforeBitmap) }
 
         if (beforeState == SpinnerDetector.SpinResult.CYAN) {
             Log.i(TAG, "Spinner: cyan — swiping")
@@ -272,7 +279,17 @@ class AutomationEngine(
             tapperService.swipe(swipeX1, swipeY, swipeX2, swipeY, SWIPE_DURATION_MS)
             delay(SPIN_RESULT_DELAY_MS)
 
-            val afterState = checkDiscState()
+            val afterShot = screenshotService.capture()
+            val afterState: SpinnerDetector.SpinResult?
+            if (afterShot != null) {
+                afterState = spinnerDetector.detectState(afterShot)
+                val afterBitmap = spinnerDetector.visualize(afterShot)
+                afterShot.release()
+                withContext(Dispatchers.Main) { tapperService.showDebugImage(afterBitmap) }
+            } else {
+                afterState = null
+            }
+
             val message = when (afterState) {
                 SpinnerDetector.SpinResult.PURPLE -> "Spinner: purple (success!)"
                 SpinnerDetector.SpinResult.CYAN   -> "Spinner: still cyan (failed)"
@@ -292,10 +309,8 @@ class AutomationEngine(
             SpinnerDetector.SpinResult.PURPLE -> "Spinner: purple"
             SpinnerDetector.SpinResult.CYAN   -> "Spinner: cyan"  // unreachable
             SpinnerDetector.SpinResult.ABSENT -> "Spinner: absent"
-            null                              -> "Screenshot failed"
         }
         Log.i(TAG, message)
-
         withContext(Dispatchers.Main) {
             lastToast?.cancel()
             lastToast = Toast.makeText(context, message, Toast.LENGTH_LONG)
