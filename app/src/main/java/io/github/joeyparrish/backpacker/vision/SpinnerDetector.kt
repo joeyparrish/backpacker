@@ -139,7 +139,9 @@ class SpinnerDetector {
         gray4.release()
 
         if (!ringMask.empty()) {
-            screenshot.copyTo(viz, ringMask)
+            // Only restore original colour for ring pixels that matched the detected colour.
+            // Non-matching ring pixels stay grey, making HSV threshold tuning easier.
+            screenshot.copyTo(viz, combined)
 
             val center = Point(w * RING_CENTER_X, h * RING_CENTER_Y)
             val outerR = (w * RING_OUTER_RADIUS_FRAC).toInt()
