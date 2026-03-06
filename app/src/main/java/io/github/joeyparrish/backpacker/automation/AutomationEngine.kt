@@ -116,6 +116,12 @@ class AutomationEngine(
                 lastToast?.show()
                 tapperService.showDebugImage(debugBitmap!!)
             }
+            // One scan per tap: stop the loop and pause the service, same as spinner debug.
+            // Set running=false synchronously so the while loop exits before the next iteration,
+            // then send the pause Intent so the service resets its state.
+            running = false
+            withContext(Dispatchers.Main) { AutomationService.pause(context) }
+            return
         } else {
             if (result.passed.isEmpty()) {
                 Log.i(TAG, "No Pokéstops detected")
