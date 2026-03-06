@@ -240,16 +240,16 @@ class AutomationEngine(
     }
 
     /**
-     * One-shot spinner debug check. Captures a screenshot, runs [SpinnerDetector.detectState],
-     * shows a visualization overlay and a toast reporting the state.
-     * If cyan, performs a swipe, re-checks, and updates the visualization.
+     * One-shot spinner debug check. Captures a single screenshot, runs
+     * [SpinnerDetector.detectState], and shows the visualization overlay and a
+     * toast reporting the detected state.
      * Caller sends AutomationService.pause() afterward to reset FAB and service state.
      */
     private suspend fun runSpinnerDebugCheck() {
         Log.d(TAG, "Spinner debug: capturing screenshot")
 
-        val beforeShot = screenshotService.capture()
-        if (beforeShot == null) {
+        val shot = screenshotService.capture()
+        if (shot == null) {
             Log.w(TAG, "Spinner debug: screenshot failed")
             withContext(Dispatchers.Main) {
                 lastToast?.cancel()
@@ -259,55 +259,13 @@ class AutomationEngine(
             return
         }
 
-        val beforeState = spinnerDetector.detectState(beforeShot)
-        val beforeBitmap: Bitmap = spinnerDetector.visualize(beforeShot)
-        beforeShot.release()
+        val state = spinnerDetector.detectState(shot)
+        val bitmap: Bitmap = spinnerDetector.visualize(shot)
+        shot.release()
 
-        withContext(Dispatchers.Main) { tapperService.showDebugImage(beforeBitmap) }
-
-        if (beforeState == SpinnerDetector.SpinResult.CYAN) {
-            Log.i(TAG, "Spinner: cyan — swiping")
-            withContext(Dispatchers.Main) {
-                lastToast?.cancel()
-                lastToast = Toast.makeText(context, "Spinner: cyan — swiping", Toast.LENGTH_SHORT)
-                lastToast?.show()
-            }
-
-            val swipeY  = screenshotService.deviceHeight * 0.5f
-            val swipeX1 = screenshotService.deviceWidth  * 0.25f
-            val swipeX2 = screenshotService.deviceWidth  * 0.75f
-            tapperService.swipe(swipeX1, swipeY, swipeX2, swipeY, SWIPE_DURATION_MS)
-            delay(SPIN_RESULT_DELAY_MS)
-
-            val afterShot = screenshotService.capture()
-            val afterState: SpinnerDetector.SpinResult?
-            if (afterShot != null) {
-                afterState = spinnerDetector.detectState(afterShot)
-                val afterBitmap = spinnerDetector.visualize(afterShot)
-                afterShot.release()
-                withContext(Dispatchers.Main) { tapperService.showDebugImage(afterBitmap) }
-            } else {
-                afterState = null
-            }
-
-            val message = when (afterState) {
-                SpinnerDetector.SpinResult.PURPLE -> "Spinner: purple (success!)"
-                SpinnerDetector.SpinResult.CYAN   -> "Spinner: still cyan (failed)"
-                SpinnerDetector.SpinResult.ABSENT -> "Spinner: absent after swipe"
-                null                              -> "Spinner: no screenshot after swipe"
-            }
-            Log.i(TAG, message)
-            withContext(Dispatchers.Main) {
-                lastToast?.cancel()
-                lastToast = Toast.makeText(context, message, Toast.LENGTH_LONG)
-                lastToast?.show()
-            }
-            return
-        }
-
-        val message = when (beforeState) {
-            SpinnerDetector.SpinResult.PURPLE -> "Spinner: purple"
-            SpinnerDetector.SpinResult.CYAN   -> "Spinner: cyan"  // unreachable
+        val message = when (state) {
+            SpinnerDetector.SpinResult.CYAN   -> "Spinner: cyan (ready)"
+            SpinnerDetector.SpinResult.PURPLE -> "Spinner: purple (spun)"
             SpinnerDetector.SpinResult.ABSENT -> "Spinner: absent"
         }
         Log.i(TAG, message)
@@ -315,6 +273,7 @@ class AutomationEngine(
             lastToast?.cancel()
             lastToast = Toast.makeText(context, message, Toast.LENGTH_LONG)
             lastToast?.show()
+            tapperService.showDebugImage(bitmap)
         }
     }
 
