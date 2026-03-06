@@ -46,7 +46,7 @@ class PokestopDetector {
     // included in a blob, which can result in a greater height or area
     // observed.
     private val hsvLower = Scalar( 85.0, 155.0, 225.0)
-    private val hsvUpper = Scalar(105.0, 255.0, 255.0)
+    private val hsvUpper = Scalar(105.0, 225.0, 255.0)
 
     // Min/max bounding-box height (720p px) for a valid disc contour.
     // Observed heights: 59 - 106
