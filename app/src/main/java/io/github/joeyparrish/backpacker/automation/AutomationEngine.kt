@@ -110,10 +110,8 @@ class AutomationEngine(
         var thisLoopDelayMs = scanIntervalMs
 
         if (debugScan) {
+            quickToast("Stops: ${result.passed.size}");
             withContext(Dispatchers.Main) {
-                lastToast?.cancel()
-                lastToast = Toast.makeText(context, "Stops: ${result.passed.size}", Toast.LENGTH_SHORT)
-                lastToast?.show()
                 tapperService.showDebugImage(debugBitmap!!)
             }
             // One scan per tap: stop the loop and pause the service, same as spinner debug.
@@ -125,6 +123,7 @@ class AutomationEngine(
         } else {
             if (result.passed.isEmpty()) {
                 Log.i(TAG, "No Pokéstops detected")
+                quickToast("No Pokéstops detected")
             } else {
                 Log.i(TAG, "Detected ${result.passed.size} Pokéstop(s), attempting spins")
                 if (result.passed.size > 0) {
@@ -178,6 +177,7 @@ class AutomationEngine(
         if (initialDiscState == SpinnerDetector.SpinResult.ABSENT ||
             initialDiscState == null) {
             Log.w(TAG, "Wrong spot tapped - scan again")
+            quickToast("Wrong spot tapped")
 
             // TODO: How we should back out from this state depends on other
             // elements on screen.  If we tapped a stop (identify by X in
@@ -190,6 +190,7 @@ class AutomationEngine(
             return false
         } else if (initialDiscState == SpinnerDetector.SpinResult.PURPLE) {
             Log.w(TAG, "Disc not ready - scan again")
+            quickToast("Disc not ready")
             tapperService.back()
             return false
         }
@@ -231,18 +232,22 @@ class AutomationEngine(
         val spinsPerHour = session.spins / elapsedHours
 
         Log.i(TAG, "Spin $succeededOrFailed (final state: $finalDiscState, session total: ${session.spins}, %.1f/hr)".format(spinsPerHour))
+        quickToast("Spin $succeededOrFailed. ${session.spins} spins (%.1f/hr)".format(spinsPerHour))
+
+        tapperService.back()
+        return success
+    }
+
+    private suspend fun quickToast(message: String) {
         withContext(Dispatchers.Main) {
             lastToast?.cancel()
             lastToast = Toast.makeText(
                 context,
-                "Spin $succeededOrFailed. ${session.spins} spins (%.1f/hr)".format(spinsPerHour),
+                message,
                 Toast.LENGTH_SHORT
             )
             lastToast?.show()
         }
-
-        tapperService.back()
-        return success
     }
 
     /**
@@ -257,11 +262,7 @@ class AutomationEngine(
         val shot = screenshotService.capture()
         if (shot == null) {
             Log.w(TAG, "Spinner debug: screenshot failed")
-            withContext(Dispatchers.Main) {
-                lastToast?.cancel()
-                lastToast = Toast.makeText(context, "Screenshot failed", Toast.LENGTH_LONG)
-                lastToast?.show()
-            }
+            quickToast("Screenshot failed")
             return
         }
 
@@ -275,10 +276,8 @@ class AutomationEngine(
             SpinnerDetector.SpinResult.ABSENT -> "Spinner: absent"
         }
         Log.i(TAG, message)
+        quickToast(message)
         withContext(Dispatchers.Main) {
-            lastToast?.cancel()
-            lastToast = Toast.makeText(context, message, Toast.LENGTH_LONG)
-            lastToast?.show()
             tapperService.showDebugImage(bitmap)
         }
     }
