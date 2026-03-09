@@ -152,12 +152,15 @@ class AutomationService : Service() {
         val mediaProjection = mpManager.getMediaProjection(resultCode, resultData)
 
         screenshotService = ScreenshotService(this, mediaProjection) {
-            // Called on the main thread when the OS revokes the projection.
+            // Called on the main thread when the OS revokes the projection
+            // (e.g. screen turned off on some devices).
+            // Reset the FAB to IDLE but leave the overlay visible so the user
+            // can see their automation state and re-enable after the screen wakes.
             Log.w(TAG, "MediaProjection revoked — stopping")
             stopLoop()
             releaseAll()
             stopSelf()
-            TapperService.instance?.hideOverlay()
+            TapperService.instance?.notifyAutomationStopped()
         }
 
         isReady = true
