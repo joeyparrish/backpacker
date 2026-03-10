@@ -116,9 +116,11 @@ class MainActivity : AppCompatActivity() {
                 updatingDebugSwitches = true
                 binding.switchSpinnerDebug.isChecked = false
                 AutomationEngine.debugSpinner = false
+                binding.switchSaveFailures.isChecked = false
+                AutomationEngine.saveFailureScreenshots = false
                 updatingDebugSwitches = false
             }
-            OverlayView.skipCarMode = checked || binding.switchSpinnerDebug.isChecked
+            OverlayView.skipCarMode = checked
         }
 
         binding.switchSpinnerDebug.setOnCheckedChangeListener { _, checked ->
@@ -128,13 +130,25 @@ class MainActivity : AppCompatActivity() {
                 updatingDebugSwitches = true
                 binding.switchDebugScan.isChecked = false
                 AutomationEngine.debugScan = false
+                binding.switchSaveFailures.isChecked = false
+                AutomationEngine.saveFailureScreenshots = false
                 updatingDebugSwitches = false
             }
-            OverlayView.skipCarMode = checked || binding.switchDebugScan.isChecked
+            OverlayView.skipCarMode = checked
         }
 
         binding.switchSaveFailures.setOnCheckedChangeListener { _, checked ->
+            if (updatingDebugSwitches) return@setOnCheckedChangeListener
             AutomationEngine.saveFailureScreenshots = checked
+            if (checked) {
+                updatingDebugSwitches = true
+                binding.switchDebugScan.isChecked = false
+                AutomationEngine.debugScan = false
+                binding.switchSpinnerDebug.isChecked = false
+                AutomationEngine.debugSpinner = false
+                updatingDebugSwitches = false
+            }
+            OverlayView.skipCarMode = false
         }
 
         binding.setupHeader.setOnClickListener {
@@ -193,12 +207,12 @@ class MainActivity : AppCompatActivity() {
         updatingDebugSwitches = true
         binding.switchDebugScan.isChecked = false
         binding.switchSpinnerDebug.isChecked = false
+        binding.switchSaveFailures.isChecked = false
         updatingDebugSwitches = false
         AutomationEngine.debugScan = false
         AutomationEngine.debugSpinner = false
-        OverlayView.skipCarMode = false
-        binding.switchSaveFailures.isChecked = false
         AutomationEngine.saveFailureScreenshots = false
+        OverlayView.skipCarMode = false
     }
 
     // -------------------------------------------------------------------------
