@@ -12,7 +12,6 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.MediaStore
 import android.util.Log
-import android.widget.Toast
 import androidx.annotation.RequiresApi
 import io.github.joeyparrish.backpacker.service.AutomationService
 import io.github.joeyparrish.backpacker.service.ScreenshotService
@@ -32,7 +31,7 @@ import kotlin.coroutines.coroutineContext
  * Coroutine-based state machine that orchestrates the full Pokéstop automation loop.
  * Run this inside a coroutine scope (see AutomationService); cancel the scope to stop.
  *
- * [context] is used for debug toasts only; pass the service's application context.
+ * [context] is used for SharedPreferences access; pass the service's application context.
  */
 class AutomationEngine(
     private val screenshotService: ScreenshotService,
@@ -47,8 +46,8 @@ class AutomationEngine(
     private val pokestopDetector = PokestopDetector()
     private val spinnerDetector = SpinnerDetector()
 
-    // Cancelled before each new toast so rapid scans don't queue up or get rate-limited.
-    private var lastToast: Toast? = null
+    // Last stats line shown on the HUD; carried forward on non-spin status updates.
+    private var lastStats = ""
 
     suspend fun run() {
         Log.i(TAG, "AutomationEngine starting")
@@ -123,7 +122,7 @@ class AutomationEngine(
         var thisLoopDelayMs = scanIntervalMs
 
         if (debugScan) {
-            quickToast("Stops: ${result.passed.size}");
+            updateHud("Pokéstops: ${result.passed.size}", lastStats)
             withContext(Dispatchers.Main) {
                 tapperService.showDebugImage(debugBitmap!!)
             }
@@ -138,18 +137,17 @@ class AutomationEngine(
                 Log.i(TAG, "No Pokéstops detected")
             } else {
                 Log.i(TAG, "Detected ${result.passed.size} Pokéstop(s), attempting spins")
-                if (result.passed.size > 0) {
-                    // Pick one disc at random.
-                    val disc = result.passed.random()
-                    val ts = System.currentTimeMillis()
-                    val success = spinDisc(disc, w, h, failureBitmap)
-                    Log.d(TAG, "perf: spinDisc=${System.currentTimeMillis() - ts}ms")
+                updateHud("Pokéstops: ${result.passed.size}", lastStats)
+                // Pick one disc at random.
+                val disc = result.passed.random()
+                val ts = System.currentTimeMillis()
+                val success = spinDisc(disc, w, h, failureBitmap)
+                Log.d(TAG, "perf: spinDisc=${System.currentTimeMillis() - ts}ms")
 
-                    // If we fail, or if there are multiple discs, scan again
-                    // immediately.
-                    if (!success || result.passed.size > 1) {
-                        thisLoopDelayMs = SCAN_IMMEDIATELY_MS
-                    }
+                // If we fail, or if there are multiple discs, scan again
+                // immediately.
+                if (!success || result.passed.size > 1) {
+                    thisLoopDelayMs = SCAN_IMMEDIATELY_MS
                 }
             }
         }
@@ -189,7 +187,7 @@ class AutomationEngine(
         if (initialDiscState == SpinnerDetector.SpinResult.ABSENT ||
             initialDiscState == null) {
             Log.w(TAG, "Wrong spot tapped - scan again")
-            quickToast("Wrong spot tapped")
+            updateHud("Wrong spot tapped", lastStats)
             if (failureBitmap != null) {
                 saveFailureScreenshot(failureBitmap)  // recycles bitmap
             }
@@ -205,7 +203,7 @@ class AutomationEngine(
             return false
         } else if (initialDiscState == SpinnerDetector.SpinResult.PURPLE) {
             Log.w(TAG, "Disc not ready - scan again")
-            quickToast("Disc not ready")
+            updateHud("Disc not ready", lastStats)
             failureBitmap?.recycle()
             tapperService.back()
             return false
@@ -251,7 +249,8 @@ class AutomationEngine(
         val spinsPerHour = session.spins / elapsedHours
 
         Log.i(TAG, "Spin $succeededOrFailed (final state: $finalDiscState, session total: ${session.spins}, %.1f/hr)".format(spinsPerHour))
-        quickToast("Spin $succeededOrFailed. ${session.spins} spins (%.1f/hr)".format(spinsPerHour))
+        lastStats = "${session.spins} spins (%.1f/hr)".format(spinsPerHour)
+        updateHud("Spin $succeededOrFailed", lastStats)
 
         tapperService.back()
         return success
@@ -345,15 +344,9 @@ class AutomationEngine(
         Log.i(TAG, "Saved failure screenshot: ${outFile.absolutePath}")
     }
 
-    private suspend fun quickToast(message: String) {
+    private suspend fun updateHud(status: String, stats: String) {
         withContext(Dispatchers.Main) {
-            lastToast?.cancel()
-            lastToast = Toast.makeText(
-                context,
-                message,
-                Toast.LENGTH_SHORT
-            )
-            lastToast?.show()
+            tapperService.updateHud(status, stats)
         }
     }
 
@@ -369,7 +362,7 @@ class AutomationEngine(
         val shot = screenshotService.capture()
         if (shot == null) {
             Log.w(TAG, "Spinner debug: screenshot failed")
-            quickToast("Screenshot failed")
+            updateHud("Screenshot failed", lastStats)
             return
         }
 
@@ -383,7 +376,7 @@ class AutomationEngine(
             SpinnerDetector.SpinResult.ABSENT -> "Spinner: absent"
         }
         Log.i(TAG, message)
-        quickToast(message)
+        updateHud(message, lastStats)
         withContext(Dispatchers.Main) {
             tapperService.showDebugImage(bitmap)
         }

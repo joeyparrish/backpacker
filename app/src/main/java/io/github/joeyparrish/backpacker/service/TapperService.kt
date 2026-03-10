@@ -9,6 +9,7 @@ import android.graphics.Bitmap
 import android.graphics.Path
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import io.github.joeyparrish.backpacker.ui.HudView
 import io.github.joeyparrish.backpacker.ui.OverlayView
 import io.github.joeyparrish.backpacker.ui.VisionDebugView
 import kotlinx.coroutines.delay
@@ -28,6 +29,7 @@ class TapperService : AccessibilityService() {
 
     private var overlayView: OverlayView? = null
     private var visionDebugView: VisionDebugView? = null
+    private var hudView: HudView? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -40,6 +42,7 @@ class TapperService : AccessibilityService() {
         try {
             overlayView = OverlayView(this) { state -> handleToggle(state) }
             visionDebugView = VisionDebugView(this)
+            hudView = HudView(this)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create overlay: $e")
         }
@@ -56,8 +59,10 @@ class TapperService : AccessibilityService() {
     override fun onDestroy() {
         try { overlayView?.hide() } catch (e: Exception) { Log.w(TAG, "hide overlay: $e") }
         try { visionDebugView?.hide() } catch (e: Exception) { Log.w(TAG, "hide vision debug: $e") }
+        try { hudView?.hide() } catch (e: Exception) { Log.w(TAG, "hide hud: $e") }
         overlayView = null
         visionDebugView = null
+        hudView = null
         isOverlayShown = false
         instance = null
         Log.i(TAG, "TapperService destroyed")
@@ -78,6 +83,7 @@ class TapperService : AccessibilityService() {
     fun hideOverlay() {
         overlayView?.hide()
         visionDebugView?.hide()
+        hudView?.hide()
         isOverlayShown = false
         Log.i(TAG, "Overlay hidden")
     }
@@ -121,9 +127,9 @@ class TapperService : AccessibilityService() {
      */
     private fun handleToggle(newState: OverlayView.State) {
         when (newState) {
-            OverlayView.State.IDLE  -> AutomationService.pause(this)
-            OverlayView.State.HOUSE -> AutomationService.run(this, AutomationService.ScanMode.HOUSE)
-            OverlayView.State.CAR   -> AutomationService.run(this, AutomationService.ScanMode.CAR)
+            OverlayView.State.IDLE  -> { AutomationService.pause(this); hudView?.hide() }
+            OverlayView.State.HOUSE -> { AutomationService.run(this, AutomationService.ScanMode.HOUSE); hudView?.show() }
+            OverlayView.State.CAR   -> { AutomationService.run(this, AutomationService.ScanMode.CAR); hudView?.show() }
         }
     }
 
@@ -133,12 +139,19 @@ class TapperService : AccessibilityService() {
      */
     fun notifyAutomationStopped() {
         overlayView?.setState(OverlayView.State.IDLE)
+        hudView?.hide()
     }
 
     /** Display a vision debug bitmap fullscreen (tap to dismiss). Resets FAB to IDLE. */
     fun showDebugImage(bitmap: Bitmap) {
         overlayView?.setState(OverlayView.State.IDLE)
+        hudView?.hide()
         visionDebugView?.show(bitmap)
+    }
+
+    /** Update the HUD status and stats lines. Must be called on the main thread. */
+    fun updateHud(status: String, stats: String) {
+        hudView?.update(status, stats)
     }
 
     companion object {
