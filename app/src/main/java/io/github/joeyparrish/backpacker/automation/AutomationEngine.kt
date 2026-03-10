@@ -123,7 +123,6 @@ class AutomationEngine(
         } else {
             if (result.passed.isEmpty()) {
                 Log.i(TAG, "No Pokéstops detected")
-                quickToast("No Pokéstops detected")
             } else {
                 Log.i(TAG, "Detected ${result.passed.size} Pokéstop(s), attempting spins")
                 if (result.passed.size > 0) {
