@@ -160,7 +160,7 @@ class AutomationService : Service() {
             stopLoop()
             releaseAll()
             stopSelf()
-            TapperService.instance?.notifyAutomationStopped()
+            TapperService.instance?.hideOverlay()
         }
 
         isReady = true
