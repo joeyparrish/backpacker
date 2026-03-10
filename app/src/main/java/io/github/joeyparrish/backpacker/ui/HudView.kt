@@ -107,6 +107,11 @@ class HudView(private val context: Context) {
         tvStats.text = stats
     }
 
+    /** Clear only the status (line 1), leaving stats (line 2) intact. */
+    fun clearStatus() {
+        tvStatus.text = ""
+    }
+
     companion object {
         private const val TAG = "Backpacker.HudView"
     }

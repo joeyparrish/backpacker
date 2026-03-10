@@ -76,6 +76,7 @@ class TapperService : AccessibilityService() {
     fun showOverlay() {
         overlayView?.setState(OverlayView.State.IDLE)
         overlayView?.show()
+        hudView?.show()
         isOverlayShown = true
         Log.i(TAG, "Overlay shown")
     }
@@ -127,9 +128,9 @@ class TapperService : AccessibilityService() {
      */
     private fun handleToggle(newState: OverlayView.State) {
         when (newState) {
-            OverlayView.State.IDLE  -> { AutomationService.pause(this); hudView?.hide() }
-            OverlayView.State.HOUSE -> { AutomationService.run(this, AutomationService.ScanMode.HOUSE); hudView?.show() }
-            OverlayView.State.CAR   -> { AutomationService.run(this, AutomationService.ScanMode.CAR); hudView?.show() }
+            OverlayView.State.IDLE  -> { AutomationService.pause(this); hudView?.clearStatus() }
+            OverlayView.State.HOUSE -> AutomationService.run(this, AutomationService.ScanMode.HOUSE)
+            OverlayView.State.CAR   -> AutomationService.run(this, AutomationService.ScanMode.CAR)
         }
     }
 
@@ -139,7 +140,7 @@ class TapperService : AccessibilityService() {
      */
     fun notifyAutomationStopped() {
         overlayView?.setState(OverlayView.State.IDLE)
-        hudView?.hide()
+        hudView?.clearStatus()
     }
 
     /** Display a vision debug bitmap fullscreen (tap to dismiss). Resets FAB to IDLE. */
