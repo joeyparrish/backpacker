@@ -6,6 +6,7 @@ package io.github.joeyparrish.backpacker.ui
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
+import android.os.Build
 import android.util.Log
 import android.view.KeyEvent
 import android.view.WindowManager
@@ -54,13 +55,20 @@ class VisionDebugView(context: Context) {
 
     // FLAG_NOT_FOCUSABLE is intentionally omitted so the window captures key events
     // (back button / back gesture) instead of passing them to the game.
+    // LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES (API 28+) lets the window extend into
+    // the camera notch area so the bitmap fills the entire physical display.
     private val layoutParams = LayoutParams(
         LayoutParams.MATCH_PARENT,
         LayoutParams.MATCH_PARENT,
         LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
         LayoutParams.FLAG_LAYOUT_IN_SCREEN,
         PixelFormat.TRANSLUCENT
-    )
+    ).also {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            it.layoutInDisplayCutoutMode =
+                LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+    }
 
     /** Display [bitmap] fullscreen.  Replaces any previously shown bitmap. */
     fun show(bitmap: Bitmap) {
