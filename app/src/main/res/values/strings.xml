@@ -15,8 +15,8 @@
     <string name="permission_battery_desc">Prevents Android from killing the automation service.</string>
     <string name="permission_battery_button">Disable Battery Optimization</string>
     <string name="overlay_label">Overlay enabled</string>
-    <string name="debug_scan_label">Debug scan: show stop markers</string>
-    <string name="spinner_debug_label">Debug spinner: show detected color and test spin</string>
+    <string name="debug_scan_label">Debug stops: show analysis of map</string>
+    <string name="spinner_debug_label">Debug spinner: show detected color</string>
     <string name="status_accessibility_ok">1. Gesture service: ENABLED</string>
     <string name="status_accessibility_missing">1. Gesture service: DISABLED</string>
     <string name="lifetime_spins">Lifetime spins: %1$d</string>
