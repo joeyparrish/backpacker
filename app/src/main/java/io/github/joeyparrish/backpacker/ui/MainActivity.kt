@@ -133,6 +133,10 @@ class MainActivity : AppCompatActivity() {
             OverlayView.skipCarMode = checked || binding.switchDebugScan.isChecked
         }
 
+        binding.switchSaveFailures.setOnCheckedChangeListener { _, checked ->
+            AutomationEngine.saveFailureScreenshots = checked
+        }
+
         binding.setupHeader.setOnClickListener {
             setupExpanded = !(setupExpanded ?: true)
             applySetupExpanded(animated = true)
@@ -193,6 +197,8 @@ class MainActivity : AppCompatActivity() {
         AutomationEngine.debugScan = false
         AutomationEngine.debugSpinner = false
         OverlayView.skipCarMode = false
+        binding.switchSaveFailures.isChecked = false
+        AutomationEngine.saveFailureScreenshots = false
     }
 
     // -------------------------------------------------------------------------

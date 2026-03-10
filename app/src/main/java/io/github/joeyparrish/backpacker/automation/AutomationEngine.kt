@@ -3,11 +3,17 @@
 
 package io.github.joeyparrish.backpacker.automation
 
+import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Build
 import android.os.PowerManager
+import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import io.github.joeyparrish.backpacker.service.AutomationService
 import io.github.joeyparrish.backpacker.service.ScreenshotService
 import io.github.joeyparrish.backpacker.service.TapperService
@@ -18,6 +24,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import org.opencv.android.Utils
+import java.io.File
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -101,6 +109,11 @@ class AutomationEngine(
         val result = pokestopDetector.detect(screenshot)
         // Generate debug bitmap before releasing screenshot (debug mode only).
         val debugBitmap = if (debugScan) pokestopDetector.visualize(screenshot, result) else null
+        // Capture failure bitmap before releasing (only when flag on and stops detected).
+        val failureBitmap: Bitmap? = if (saveFailureScreenshots && result.passed.isNotEmpty()) {
+            Bitmap.createBitmap(screenshot.cols(), screenshot.rows(), Bitmap.Config.ARGB_8888)
+                .also { Utils.matToBitmap(screenshot, it) }
+        } else null
         screenshot.release()
         val t2 = System.currentTimeMillis()
         Log.d(TAG, "perf: detect=${t2 - t1}ms  stops=${result.passed.size}")
@@ -129,7 +142,7 @@ class AutomationEngine(
                     // Pick one disc at random.
                     val disc = result.passed.random()
                     val ts = System.currentTimeMillis()
-                    val success = spinDisc(disc, w, h)
+                    val success = spinDisc(disc, w, h, failureBitmap)
                     Log.d(TAG, "perf: spinDisc=${System.currentTimeMillis() - ts}ms")
 
                     // If we fail, or if there are multiple discs, scan again
@@ -163,7 +176,7 @@ class AutomationEngine(
      *
      * Returns true on success.
      */
-    private suspend fun spinDisc(disc: PokestopDetector.Disc, deviceWidth: Int, deviceHeight: Int): Boolean {
+    private suspend fun spinDisc(disc: PokestopDetector.Disc, deviceWidth: Int, deviceHeight: Int, failureBitmap: Bitmap? = null): Boolean {
         val tapX = CoordinateTransform.toDeviceX(disc.centroid.x, deviceWidth)
         val tapY = CoordinateTransform.toDeviceY(disc.centroid.y, deviceWidth)
         Log.d(TAG, "Tapping disc at device (%.1f, %.1f)".format(tapX, tapY))
@@ -177,6 +190,9 @@ class AutomationEngine(
             initialDiscState == null) {
             Log.w(TAG, "Wrong spot tapped - scan again")
             quickToast("Wrong spot tapped")
+            if (failureBitmap != null) {
+                saveFailureScreenshot(failureBitmap)  // recycles bitmap
+            }
 
             // TODO: How we should back out from this state depends on other
             // elements on screen.  If we tapped a stop (identify by X in
@@ -190,9 +206,13 @@ class AutomationEngine(
         } else if (initialDiscState == SpinnerDetector.SpinResult.PURPLE) {
             Log.w(TAG, "Disc not ready - scan again")
             quickToast("Disc not ready")
+            failureBitmap?.recycle()
             tapperService.back()
             return false
         }
+
+        // CYAN — spinner is ready; bitmap no longer needed.
+        failureBitmap?.recycle()
 
         // Swipe horizontally across the centre of the screen to spin the
         // circle.  Do it several time rapidly.  This fires off several network
@@ -235,6 +255,94 @@ class AutomationEngine(
 
         tapperService.back()
         return success
+    }
+
+    /** Save [bitmap] to Pictures/Backpacker (MediaStore on API 29+, external files dir below). Always recycles [bitmap]. */
+    private fun saveFailureScreenshot(bitmap: Bitmap) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                saveViaMediaStore(bitmap)
+            } else {
+                saveViaFileSystem(bitmap)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save failure screenshot: $e")
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun saveViaMediaStore(bitmap: Bitmap) {
+        pruneMediaStoreFailures()
+        val filename = "failure_${System.currentTimeMillis()}.png"
+        val cv = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Backpacker")
+            put(MediaStore.Images.Media.IS_PENDING, 1)
+        }
+        val uri: Uri = context.contentResolver.insert(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv
+        ) ?: run {
+            Log.e(TAG, "MediaStore.insert returned null for $filename")
+            return
+        }
+        try {
+            context.contentResolver.openOutputStream(uri)?.use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            cv.clear()
+            cv.put(MediaStore.Images.Media.IS_PENDING, 0)
+            context.contentResolver.update(uri, cv, null, null)
+            Log.i(TAG, "Saved failure screenshot: $filename")
+        } catch (e: Exception) {
+            context.contentResolver.delete(uri, null, null)
+            throw e
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun pruneMediaStoreFailures() {
+        val projection = arrayOf(MediaStore.Images.Media._ID)
+        val selection = "${MediaStore.Images.Media.RELATIVE_PATH} LIKE ? AND " +
+                "${MediaStore.Images.Media.DISPLAY_NAME} LIKE ?"
+        val selectionArgs = arrayOf("Pictures/Backpacker%", "failure_%.png")
+        val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} ASC"
+        val uris = mutableListOf<Uri>()
+        context.contentResolver.query(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            projection, selection, selectionArgs, sortOrder
+        )?.use { cursor ->
+            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+            while (cursor.moveToNext()) {
+                uris.add(ContentUris.withAppendedId(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cursor.getLong(idCol)
+                ))
+            }
+        }
+        val toDelete = uris.size - (MAX_FAILURE_SCREENSHOTS - 1)
+        if (toDelete > 0) {
+            uris.take(toDelete).forEach { context.contentResolver.delete(it, null, null) }
+            Log.d(TAG, "Pruned $toDelete old failure screenshots")
+        }
+    }
+
+    private fun saveViaFileSystem(bitmap: Bitmap) {
+        val dir = File(context.getExternalFilesDir(null), "Backpacker").apply { mkdirs() }
+        val existing = dir.listFiles { f -> f.name.startsWith("failure_") && f.name.endsWith(".png") }
+            ?.sortedBy { it.name } ?: emptyList()
+        val toDelete = existing.size - (MAX_FAILURE_SCREENSHOTS - 1)
+        if (toDelete > 0) {
+            existing.take(toDelete).forEach { it.delete() }
+            Log.d(TAG, "Pruned $toDelete old failure screenshots from filesystem")
+        }
+        val filename = "failure_${System.currentTimeMillis()}.png"
+        val outFile = File(dir, filename)
+        outFile.outputStream().use { out ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        Log.i(TAG, "Saved failure screenshot: ${outFile.absolutePath}")
     }
 
     private suspend fun quickToast(message: String) {
@@ -290,6 +398,9 @@ class AutomationEngine(
         /** When true, the next FAB activation takes one spinner screenshot and reports its state. */
         @Volatile var debugSpinner = false
 
+        /** When true, screenshots that led to ABSENT disc state are saved to Pictures/Backpacker. */
+        @Volatile var saveFailureScreenshots = false
+
         // Poll interval when the screen is off — short enough to resume promptly,
         // long enough not to spin the CPU while the display is dark.
         private const val SCREEN_OFF_POLL_MS      = 5_000L
@@ -303,6 +414,8 @@ class AutomationEngine(
         private const val NUM_SPIN_ATTEMPTS       =    10L  // spin this many times
         private const val SPIN_RESULT_DELAY_MS    =   500L  // delay before checking spin result
         private const val SCAN_IMMEDIATELY_MS     = 1_500L  // scan "right away", but with time for the "back to map" animation to settle
+
+        private const val MAX_FAILURE_SCREENSHOTS = 30
 
         const val PREFS_NAME         = "backpacker_prefs"
         const val PREF_LIFETIME_SPINS = "lifetime_spins"
