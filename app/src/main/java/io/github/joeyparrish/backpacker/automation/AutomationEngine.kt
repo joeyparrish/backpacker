@@ -54,6 +54,11 @@ class AutomationEngine(
         // Brief pause so any UI state changes (FAB icon, overlays) settle before first capture.
         delay(SETTLE_DELAY_MS)
 
+        // Initialise the HUD stats line so the user sees "0 spins (0.0/hr)" immediately
+        // rather than a blank second line.
+        lastStats = "${session.spins} spins (0.0/hr)"
+        updateHud("", lastStats)
+
         if (debugSpinner) {
             runSpinnerDebugCheck()
             // Pause via the service so the FAB resets to IDLE and the notification updates.
