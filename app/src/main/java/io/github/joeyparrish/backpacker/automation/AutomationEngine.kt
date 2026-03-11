@@ -46,9 +46,6 @@ class AutomationEngine(
     private val pokestopDetector = PokestopDetector()
     private val spinnerDetector = SpinnerDetector()
 
-    // Last stats line shown on the HUD; carried forward on non-spin status updates.
-    private var lastStats = ""
-
     suspend fun run() {
         Log.i(TAG, "AutomationEngine starting")
         // Brief pause so any UI state changes (FAB icon, overlays) settle before first capture.
@@ -56,8 +53,7 @@ class AutomationEngine(
 
         // Initialise the HUD stats line so the user sees "0 spins (0.0/hr)" immediately
         // rather than a blank second line.
-        lastStats = "${session.spins} spins (0.0/hr)"
-        updateHud("", lastStats)
+        updateHud("")
 
         if (debugSpinner) {
             runSpinnerDebugCheck()
@@ -127,7 +123,7 @@ class AutomationEngine(
         var thisLoopDelayMs = scanIntervalMs
 
         if (debugScan) {
-            updateHud("Pokéstops: ${result.passed.size}", lastStats)
+            updateHud("Pokéstops: ${result.passed.size}")
             withContext(Dispatchers.Main) {
                 tapperService.showDebugImage(debugBitmap!!)
             }
@@ -142,7 +138,7 @@ class AutomationEngine(
                 Log.i(TAG, "No Pokéstops detected")
             } else {
                 Log.i(TAG, "Detected ${result.passed.size} Pokéstop(s), attempting spins")
-                updateHud("Pokéstops: ${result.passed.size}", lastStats)
+                updateHud("Pokéstops: ${result.passed.size}")
                 // Pick one disc at random.
                 val disc = result.passed.random()
                 val ts = System.currentTimeMillis()
@@ -192,7 +188,7 @@ class AutomationEngine(
         if (initialDiscState == SpinnerDetector.SpinResult.ABSENT ||
             initialDiscState == null) {
             Log.w(TAG, "Wrong spot tapped - scan again")
-            updateHud("Wrong spot tapped", lastStats)
+            updateHud("Wrong spot tapped")
             if (failureBitmap != null) {
                 saveFailureScreenshot(failureBitmap)  // recycles bitmap
             }
@@ -208,7 +204,7 @@ class AutomationEngine(
             return false
         } else if (initialDiscState == SpinnerDetector.SpinResult.PURPLE) {
             Log.w(TAG, "Disc not ready - scan again")
-            updateHud("Disc not ready", lastStats)
+            updateHud("Disc not ready")
             failureBitmap?.recycle()
             tapperService.back()
             return false
@@ -250,12 +246,8 @@ class AutomationEngine(
             }
         }
 
-        val elapsedHours = (System.currentTimeMillis() - session.startMs) / 3_600_000.0
-        val spinsPerHour = session.spins / elapsedHours
-
-        Log.i(TAG, "Spin $succeededOrFailed (final state: $finalDiscState, session total: ${session.spins}, %.1f/hr)".format(spinsPerHour))
-        lastStats = "${session.spins} spins (%.1f/hr)".format(spinsPerHour)
-        updateHud("Spin $succeededOrFailed", lastStats)
+        updateHud("Spin $succeededOrFailed")
+        Log.i(TAG, "Spin $succeededOrFailed (final state: $finalDiscState, session total: ${session.spins})")
 
         tapperService.back()
         return success
@@ -349,7 +341,11 @@ class AutomationEngine(
         Log.i(TAG, "Saved failure screenshot: ${outFile.absolutePath}")
     }
 
-    private suspend fun updateHud(status: String, stats: String) {
+    private suspend fun updateHud(status: String) {
+        val elapsedHours = (System.currentTimeMillis() - session.startMs) / 3_600_000.0
+        val spinsPerHour = if (elapsedHours > 0) session.spins / elapsedHours else 0.0
+        val stats = "${session.spins} spins (%.1f/hr)".format(spinsPerHour)
+
         withContext(Dispatchers.Main) {
             tapperService.updateHud(status, stats)
         }
@@ -367,7 +363,7 @@ class AutomationEngine(
         val shot = screenshotService.capture()
         if (shot == null) {
             Log.w(TAG, "Spinner debug: screenshot failed")
-            updateHud("Screenshot failed", lastStats)
+            updateHud("Screenshot failed")
             return
         }
 
@@ -381,7 +377,7 @@ class AutomationEngine(
             SpinnerDetector.SpinResult.ABSENT -> "Spinner: absent"
         }
         Log.i(TAG, message)
-        updateHud(message, lastStats)
+        updateHud(message)
         withContext(Dispatchers.Main) {
             tapperService.showDebugImage(bitmap)
         }
