@@ -36,12 +36,14 @@ class HudView(private val context: Context) {
         setTextColor(Color.WHITE)
         textSize = 13f
         setShadowLayer(3f, 1f, 1f, Color.BLACK)
+        text = "Idle"
     }
 
     private val tvStats = TextView(context).apply {
         setTextColor(Color.WHITE)
         textSize = 13f
         setShadowLayer(3f, 1f, 1f, Color.BLACK)
+        text = "No stats"
     }
 
     private val container = LinearLayout(context).apply {
