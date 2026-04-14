@@ -17,6 +17,7 @@ import io.github.joeyparrish.backpacker.service.AutomationService
 import io.github.joeyparrish.backpacker.service.ScreenshotService
 import io.github.joeyparrish.backpacker.service.TapperService
 import io.github.joeyparrish.backpacker.util.CoordinateTransform
+import io.github.joeyparrish.backpacker.vision.PassengerDetector
 import io.github.joeyparrish.backpacker.vision.PokestopDetector
 import io.github.joeyparrish.backpacker.vision.SpinnerDetector
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +44,7 @@ class AutomationEngine(
     @Volatile private var running = true
 
     private val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+    private val passengerDetector = PassengerDetector()
     private val pokestopDetector = PokestopDetector()
     private val spinnerDetector = SpinnerDetector()
 
@@ -80,6 +82,7 @@ class AutomationEngine(
 
     /** Release pre-allocated OpenCV Mats held by the detectors. Call after [stop]. */
     fun release() {
+        passengerDetector.release()
         pokestopDetector.release()
         spinnerDetector.release()
     }
@@ -106,6 +109,22 @@ class AutomationEngine(
 
         val w = screenshotService.deviceWidth
         val h = screenshotService.deviceHeight
+
+        // Check for the speed-warning dialog before scanning for Pokéstops.
+        // If the "I'm a Passenger" button (or any matching green pill) is visible, tap it
+        // and rescan immediately rather than trying to spin through an obscured map.
+        val passengerButton = passengerDetector.detect(screenshot)
+        if (passengerButton != null) {
+            screenshot.release()
+            val tapX = CoordinateTransform.toDeviceX(passengerButton.x, w)
+            val tapY = CoordinateTransform.toDeviceY(passengerButton.y, w)
+            Log.i(TAG, "Speed warning detected — tapping dismiss button at ($tapX, $tapY)")
+            tapperService.tap(tapX, tapY)
+            updateHud("Speed warning dismissed")
+            delay(DISMISS_DELAY_MS)
+            return  // rescan immediately on the next iteration
+        }
+
         val result = pokestopDetector.detect(screenshot)
         // Generate debug bitmap before releasing screenshot (debug mode only).
         val debugBitmap = if (debugScan) pokestopDetector.visualize(screenshot, result) else null
@@ -401,6 +420,7 @@ class AutomationEngine(
 
         // Timing constants
         private const val SETTLE_DELAY_MS         =   500L  // FAB/overlay settle after activation
+        private const val DISMISS_DELAY_MS        =   800L  // wait for speed-warning dialog to animate away
         private const val CAPTURE_RETRY_MS        = 2_000L  // VirtualDisplay not ready yet
         private const val ERROR_RECOVERY_DELAY_MS = 5_000L  // pause after unexpected scan error
         private const val OPEN_DELAY_MS           = 1_000L  // wait for detail view animation
