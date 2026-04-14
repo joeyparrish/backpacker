@@ -38,9 +38,11 @@ import org.opencv.imgproc.Imgproc
  */
 class PassengerDetector {
 
-    // HSV range covering yellow-green (H≈40) through teal (H≈95) in OpenCV 0–180 scale.
-    private val hsvLower = Scalar(40.0, 150.0, 150.0)
-    private val hsvUpper = Scalar(95.0, 255.0, 255.0)
+    // HSV range covering yellow-green (H≈40) through teal (H≈105) in OpenCV 0–180 scale.
+    // S lower bound is intentionally loose (60) to catch the pale/desaturated left side of
+    // the gradient; the right (teal) side can reach H≈100–105, matching Pokéstop cyan.
+    private val hsvLower = Scalar(35.0, 60.0, 120.0)
+    private val hsvUpper = Scalar(110.0, 255.0, 255.0)
 
     // Minimum aspect ratio (width / height) for a pill-shaped button.
     // The background overlay blob has a portrait aspect ratio (~0.56) and is rejected here.
