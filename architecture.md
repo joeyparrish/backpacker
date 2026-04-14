@@ -34,7 +34,8 @@ app/src/main/java/io/github/joeyparrish/backpacker/
 │   └── ScreenshotService.kt   - MediaProjection wrapper; captures frames as OpenCV Mats
 ├── vision/
 │   ├── PokestopDetector.kt    - HSV mask + contour analysis → disc centroids; visualize() for debug
-│   └── SpinnerDetector.kt     - Fixed-geometry annular ring mask → spinner state; visualize() for debug
+│   ├── SpinnerDetector.kt     - Fixed-geometry annular ring mask → spinner state; visualize() for debug
+│   └── PassengerDetector.kt   - White dialog → green pill inside it → tap target; visualize() for debug
 ├── automation/
 │   └── AutomationEngine.kt    - Coroutine state machine; drives the full spin loop
 ├── ui/
@@ -77,13 +78,16 @@ Provides three gesture primitives:
   for `durationMs` after dispatch so the coroutine waits for gesture completion
 - `back()` - `performGlobalAction(GLOBAL_ACTION_BACK)`
 
-Also owns two overlay windows:
+Also owns three overlay windows:
 
 - **OverlayView** - draggable FAB, cycles IDLE → HOUSE → CAR → IDLE on tap
-- **DebugOverlayView** - full-screen transparent overlay; draws bounding boxes
-  over detected disc positions for calibration
+- **HudView** - persistent two-line status overlay (bottom-left); shows latest
+  action and session spin stats; `FLAG_NOT_FOCUSABLE|FLAG_NOT_TOUCHABLE` so
+  input passes through to the game
+- **VisionDebugView** - full-screen tap-to-dismiss overlay for vision debug
+  bitmaps; captures back gesture so it does not fall through to the game
 
-Both use `TYPE_ACCESSIBILITY_OVERLAY` which requires no `SYSTEM_ALERT_WINDOW`
+All use `TYPE_ACCESSIBILITY_OVERLAY` which requires no `SYSTEM_ALERT_WINDOW`
 permission.
 
 ### AutomationService (ForegroundService)
@@ -122,6 +126,10 @@ run()
     │
     ├─ capture() → Mat (720p RGBA)
     │   └─ If null → sleep CAPTURE_RETRY_MS, retry
+    │
+    ├─ PassengerDetector.detect(screenshot)
+    │   ├─ [passenger debug mode] → one-shot visualize, auto-pause
+    │   └─ If button found → tap, sleep DISMISS_DELAY_MS, repeat loop immediately
     │
     ├─ PokestopDetector.detect(screenshot) → DetectionResult
     │   └─ If no passing discs → sleep scanIntervalMs → repeat
@@ -218,6 +226,43 @@ A fixed-geometry mask eliminates this failure mode entirely and is faster.
 **Why an annular mask instead of a full-circle or ROI:** The disc photo in the
 centre of the spinner view is also coloured and could trigger false positives.
 The ring mask isolates the spinner band and ignores the interior.
+
+### Speed-Warning Dialog Detection (PassengerDetector)
+
+Detects the "You're going too fast!" dialog (and any other PoGO dialog that
+uses the same gradient pill button) so the engine can dismiss it without
+stalling.
+
+**Algorithm:**
+
+1. Convert to greyscale; threshold at brightness 230 to isolate near-white
+   pixels.
+2. Find the largest bright contour covering ≥ 12% of screen area — that is
+   the white dialog box. If none found, return null (no dialog present).
+3. Compute the full-image green HSV mask (H=35–110, S>60, V>120), then zero
+   out every pixel outside the dialog bounding rect. This prevents the
+   greenish background overlay from connecting to the button through the
+   dialog edge, which would merge them into one contour and destroy the
+   aspect-ratio signal.
+4. Find contours inside the restricted mask; select the largest one with
+   aspect ratio ≥ 3.0 and area ≥ 10 000 px² — that is the pill button.
+5. Return the bounding-rect centre as the tap target.
+
+**Why detect the dialog box first:** The green background overlay and the
+button share the same HSV range. Without the dialog as an ROI, they touch
+at the dialog edge (even without morphological operations) and OpenCV sees
+one large blob. The dialog box is a reliable prerequisite: the button only
+exists inside it.
+
+**Why no morphological close:** A morph close was tried to fill the
+white-text holes inside the button, but it bridged the button to the
+background, causing the merge described above. `RETR_EXTERNAL` ignores
+internal holes, so the outer button boundary is intact without it.
+
+**Button appearance:** Yellow-green to teal horizontal gradient with white
+text. The pale left side has low saturation (~S=60), hence the loose S
+lower bound. Other PoGO dialogs with the same gradient button style are
+matched intentionally.
 
 ---
 

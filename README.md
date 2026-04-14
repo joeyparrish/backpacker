@@ -76,15 +76,30 @@ tracked and shown in the main app.
 
 ### Debug modes (in the Backpacker app)
 
-- **Debug scan** — on each scan, highlights detected disc positions with
-  bounding boxes on a transparent overlay. Useful for tuning detection
-  thresholds in source.
-- **Debug spinner** — on the next tap, captures one screenshot and reports
-  whether the spinner is cyan, purple, or absent. If cyan, performs one swipe
-  and reports the result.
+All debug modes are mutually exclusive. Enabling one clears the others.
+Debug flags are cleared when the overlay is turned off.
 
-Both debug modes disable "moving" mode (the button only offers "idle" and
-"stationary").  Debug flags are cleared when the overlay is turned off.
+- **Debug scan** — captures one screenshot, highlights detected Pokéstop disc
+  positions with bounding boxes, shows the result as a full-screen overlay.
+  Useful for tuning detection thresholds.
+- **Debug spinner** — captures one screenshot and reports whether the spinner
+  ring is cyan (ready), purple (already spun), or absent (wrong screen).
+- **Debug passenger** — captures one screenshot and reports whether the
+  speed-warning dialog's green pill button is detected. Useful for checking
+  false-positive rates across different game screens.
+- **Save screenshots for failures** — saves a PNG to `Pictures/Backpacker`
+  whenever the engine taps a disc but finds nothing recognisable on screen
+  (wrong tap target). Keeps the last 30 files.
+
+The first three modes disable "moving" mode (the button only offers "idle"
+and "stationary") and are one-shot: one tap captures one screenshot, then
+the overlay resets to idle.
+
+### Debug logging
+
+```
+adb logcat | grep Backpacker
+```
 
 ---
 
