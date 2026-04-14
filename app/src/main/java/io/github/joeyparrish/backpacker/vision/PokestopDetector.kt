@@ -125,11 +125,12 @@ class PokestopDetector {
 
                 val discCenterNx = (bb.x + bb.width  / 2f) / normWidth
                 val discCenterNy = (bb.y + bb.height / 2f) / normHeight
-                // Spin-radius check: both axes scaled by width so the distance is circular.
-                val discNyByWidth = (bb.y + bb.height / 2f) / normWidth
-                val spinDx = discCenterNx - SPIN_CENTER_NX
-                val spinDy = discNyByWidth - SPIN_CENTER_NY
-                val inSpinRadius = spinDx * spinDx + spinDy * spinDy <= SPIN_RADIUS_N * SPIN_RADIUS_N
+                // Spin-radius check: X is normalised by width, Y by height.  The circle in
+                // pixel space becomes an ellipse in this non-square normalised space, so we
+                // use the ellipse membership formula: (dx/rx)² + (dy/ry)² ≤ 1.
+                val sdx = (discCenterNx - SPIN_CENTER_NX) / SPIN_RADIUS_NX
+                val sdy = (discCenterNy - SPIN_CENTER_NY) / SPIN_RADIUS_NY
+                val inSpinRadius = sdx * sdx + sdy * sdy <= 1.0f
                 val exclusionZone = EXCLUSION_ZONES.firstOrNull { it.contains(discCenterNx, discCenterNy) }
                 val verdict = when {
                     bb.height !in minDiscHeight..maxDiscHeight ->
@@ -244,12 +245,14 @@ class PokestopDetector {
             fun contains(nx: Float, ny: Float) = nx in x1..x2 && ny in y1..y2
         }
 
-        // Spin radius: character position and radius, normalised by screen width.
-        // Both axes use width as the scale unit so the distance check is circular.
+        // Spin radius: character position and radius in natural normalised coords
+        // (X by width, Y by height).  The circle in pixel space is expressed as an
+        // ellipse in this non-square space; use (dx/rx)²+(dy/ry)²≤1 to test membership.
         // Measured from a 1080×2400 screenshot: character at (540,1520), spin radius top at Y=1080.
         private const val SPIN_CENTER_NX = 0.500f   // 540  / 1080
-        private const val SPIN_CENTER_NY = 1.407f   // 1520 / 1080
-        private const val SPIN_RADIUS_N  = 0.407f   // 440  / 1080
+        private const val SPIN_CENTER_NY = 0.633f   // 1520 / 2400
+        private const val SPIN_RADIUS_NX = 0.407f   // 440  / 1080
+        private const val SPIN_RADIUS_NY = 0.183f   // 440  / 2400
 
         // Normalised (0–1) rectangles covering PoGO UI elements that share Pokéstop cyan.
         // Measured from a 1080×2400 screenshot.
