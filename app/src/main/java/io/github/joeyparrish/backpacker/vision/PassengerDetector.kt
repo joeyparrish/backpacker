@@ -12,7 +12,6 @@ import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint
 import org.opencv.core.Point
 import org.opencv.core.Scalar
-import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 
 /**
@@ -51,14 +50,9 @@ class PassengerDetector {
     // Minimum contour area (720p px²) to reject small incidental green elements.
     private val minArea = 10_000.0
 
-    // Morphological close kernel: large enough to bridge the white-text gaps inside the button.
-    private val morphKernelSize = Size(15.0, 15.0)
-
-    private val hsv         = Mat()
-    private val mask        = Mat()
-    private val morphed     = Mat()
-    private val hierarchy   = Mat()
-    private val morphKernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, morphKernelSize)
+    private val hsv       = Mat()
+    private val mask      = Mat()
+    private val hierarchy = Mat()
 
     /**
      * Detect a green pill button in [screenshot] (720p RGBA Mat from ScreenshotService).
@@ -69,11 +63,10 @@ class PassengerDetector {
         Imgproc.cvtColor(screenshot, hsv, Imgproc.COLOR_RGBA2RGB)
         Imgproc.cvtColor(hsv, hsv, Imgproc.COLOR_RGB2HSV)
         Core.inRange(hsv, hsvLower, hsvUpper, mask)
-        Imgproc.morphologyEx(mask, morphed, Imgproc.MORPH_CLOSE, morphKernel)
 
         val contours = mutableListOf<MatOfPoint>()
         Imgproc.findContours(
-            morphed, contours, hierarchy,
+            mask, contours, hierarchy,
             Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE
         )
 
@@ -142,9 +135,7 @@ class PassengerDetector {
     fun release() {
         hsv.release()
         mask.release()
-        morphed.release()
         hierarchy.release()
-        morphKernel.release()
     }
 
     companion object {
