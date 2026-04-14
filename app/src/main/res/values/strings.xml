@@ -18,6 +18,7 @@
     <string name="debug_scan_label">Debug stops: show analysis of map</string>
     <string name="spinner_debug_label">Debug spinner: show detected color</string>
     <string name="save_failures_label">Save screenshots for failures</string>
+    <string name="passenger_debug_label">Debug passenger: show button detection</string>
     <string name="status_accessibility_ok">1. Gesture service: ENABLED</string>
     <string name="status_accessibility_missing">1. Gesture service: DISABLED</string>
     <string name="lifetime_spins">Lifetime spins: %1$d</string>

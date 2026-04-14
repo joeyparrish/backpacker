@@ -114,7 +114,17 @@ class AutomationEngine(
         // If the "I'm a Passenger" button (or any matching green pill) is visible, tap it
         // and rescan immediately rather than trying to spin through an obscured map.
         val passengerButton = passengerDetector.detect(screenshot)
-        if (passengerButton != null) {
+        if (debugPassenger) {
+            val debugBitmap = passengerDetector.visualize(screenshot, passengerButton)
+            screenshot.release()
+            val status = if (passengerButton != null) "Passenger button found" else "No passenger button"
+            Log.i(TAG, status)
+            updateHud(status)
+            withContext(Dispatchers.Main) { tapperService.showDebugImage(debugBitmap) }
+            running = false
+            withContext(Dispatchers.Main) { AutomationService.pause(context) }
+            return
+        } else if (passengerButton != null) {
             screenshot.release()
             val tapX = CoordinateTransform.toDeviceX(passengerButton.x, w)
             val tapY = CoordinateTransform.toDeviceY(passengerButton.y, w)
@@ -413,6 +423,9 @@ class AutomationEngine(
 
         /** When true, screenshots that led to ABSENT disc state are saved to Pictures/Backpacker. */
         @Volatile var saveFailureScreenshots = false
+
+        /** When true, each scan runs PassengerDetector and shows the debug overlay. */
+        @Volatile var debugPassenger = false
 
         // Poll interval when the screen is off — short enough to resume promptly,
         // long enough not to spin the CPU while the display is dark.
