@@ -8,9 +8,11 @@ import android.graphics.PointF
 import android.util.Log
 import org.opencv.android.Utils
 import org.opencv.core.Core
+import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint
 import org.opencv.core.Point
+import org.opencv.core.Rect
 import org.opencv.core.Scalar
 import org.opencv.imgproc.Imgproc
 
@@ -19,54 +21,77 @@ import org.opencv.imgproc.Imgproc
  * yellow-green → teal gradient pill button) in a 720p-normalised screenshot.
  *
  * Algorithm:
- *   1. Convert RGBA → HSV
- *   2. Threshold for yellow-green → teal (H 40–95, S > 150, V > 150)
- *   3. Morphological close to fill the white-text holes left inside the button
- *   4. Find contours; select the largest one with aspect ratio ≥ [MIN_ASPECT_RATIO]
- *      and area ≥ [MIN_AREA] — that is the pill button
- *   5. Return the bounding-rect centre as the tap target in 720p-normalised space
+ *   1. Find the white dialog box by thresholding for near-white pixels and taking the
+ *      largest bright contour.  If no dialog is present, return null immediately.
+ *   2. Convert RGBA → HSV; threshold for yellow-green → teal (H 35–110, S > 60, V > 120).
+ *   3. Zero out the green mask outside the dialog bounds so the background overlay
+ *      cannot merge with the button into a single contour.
+ *   4. Find contours inside the dialog; select the largest one with aspect ratio ≥
+ *      [MIN_ASPECT_RATIO] and area ≥ [MIN_AREA] — that is the pill button.
+ *   5. Return the bounding-rect centre as the tap target in 720p-normalised space.
  *
- * The HSV range also covers the green background overlay that obscures the game behind the
- * dialog, but that blob has a screen-filling aspect ratio and is rejected by the aspect-ratio
- * filter.
+ * Requiring a white dialog as a prerequisite also improves specificity: the button is
+ * only ever present inside such a dialog.
  *
- * Other PoGO dialogs that share this button style (e.g. post-catch bonus) will also be matched
- * and dismissed; that is intentional.
+ * Other PoGO dialogs that share this button style (e.g. post-catch bonus) will also be
+ * matched and dismissed; that is intentional.
  *
  * Pre-allocated Mats are reused across calls.  Call [release] when done.
  */
 class PassengerDetector {
 
     // HSV range covering yellow-green (H≈40) through teal (H≈105) in OpenCV 0–180 scale.
-    // S lower bound is intentionally loose (60) to catch the pale/desaturated left side of
-    // the gradient; the right (teal) side can reach H≈100–105, matching Pokéstop cyan.
+    // S lower bound is loose (60) to catch the pale/desaturated left side of the gradient.
     private val hsvLower = Scalar(35.0, 60.0, 120.0)
     private val hsvUpper = Scalar(110.0, 255.0, 255.0)
 
     // Minimum aspect ratio (width / height) for a pill-shaped button.
-    // The background overlay blob has a portrait aspect ratio (~0.56) and is rejected here.
     private val minAspectRatio = 3.0f
 
     // Minimum contour area (720p px²) to reject small incidental green elements.
     private val minArea = 10_000.0
 
-    private val hsv       = Mat()
-    private val mask      = Mat()
-    private val hierarchy = Mat()
+    // Greyscale threshold for "near-white" dialog background detection.
+    private val whiteThreshold = 230.0
+
+    // Minimum fraction of screen area a white region must cover to be the dialog.
+    private val minDialogAreaFrac = 0.12
+
+    private val gray         = Mat()
+    private val whiteMask    = Mat()
+    private val hsv          = Mat()
+    private val mask         = Mat()
+    // restrictedMask is sized lazily to the first frame and reused thereafter.
+    private var restrictedMask = Mat()
+    private val hierarchy    = Mat()
 
     /**
      * Detect a green pill button in [screenshot] (720p RGBA Mat from ScreenshotService).
-     * Returns the button centre in 720p-normalised space, or null if no pill found.
+     * Returns the button centre in 720p-normalised space, or null if no dialog or pill found.
      * The caller retains ownership of [screenshot].
      */
     fun detect(screenshot: Mat): PointF? {
+        // Step 1: locate the white dialog box.  Without it there is no button.
+        val dialogRect = findDialogRect(screenshot) ?: return null
+
+        // Step 2: build the green mask for the full image.
         Imgproc.cvtColor(screenshot, hsv, Imgproc.COLOR_RGBA2RGB)
         Imgproc.cvtColor(hsv, hsv, Imgproc.COLOR_RGB2HSV)
         Core.inRange(hsv, hsvLower, hsvUpper, mask)
 
+        // Step 3: zero the mask outside the dialog so background and button cannot merge.
+        if (restrictedMask.rows() != screenshot.rows() || restrictedMask.cols() != screenshot.cols()) {
+            restrictedMask.release()
+            restrictedMask = Mat.zeros(screenshot.rows(), screenshot.cols(), CvType.CV_8UC1)
+        } else {
+            restrictedMask.setTo(Scalar(0.0))
+        }
+        mask.submat(dialogRect).copyTo(restrictedMask.submat(dialogRect))
+
+        // Step 4: find contours inside the restricted mask.
         val contours = mutableListOf<MatOfPoint>()
         Imgproc.findContours(
-            mask, contours, hierarchy,
+            restrictedMask, contours, hierarchy,
             Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE
         )
 
@@ -91,18 +116,55 @@ class PassengerDetector {
         if (bestCenter != null) {
             Log.i(TAG, "Pill button at (${bestCenter.x}, ${bestCenter.y}), area=${bestArea.toInt()}")
         } else {
-            Log.d(TAG, "No pill button found (${contours.size} contours checked)")
+            Log.d(TAG, "No pill button found (${contours.size} contours inside dialog)")
         }
 
         return bestCenter
     }
 
     /**
+     * Find the bounding rect of the white dialog box in [screenshot].
+     * Returns null if no sufficiently large bright region is found.
+     */
+    private fun findDialogRect(screenshot: Mat): Rect? {
+        Imgproc.cvtColor(screenshot, gray, Imgproc.COLOR_RGBA2GRAY)
+        Imgproc.threshold(gray, whiteMask, whiteThreshold, 255.0, Imgproc.THRESH_BINARY)
+
+        val contours = mutableListOf<MatOfPoint>()
+        val tmpHierarchy = Mat()
+        Imgproc.findContours(
+            whiteMask, contours, tmpHierarchy,
+            Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE
+        )
+        tmpHierarchy.release()
+
+        val minArea = screenshot.cols() * screenshot.rows() * minDialogAreaFrac
+        var bestRect: Rect? = null
+        var bestArea = 0.0
+
+        for (contour in contours) {
+            val area = Imgproc.contourArea(contour)
+            if (area >= minArea && area > bestArea) {
+                bestArea = area
+                bestRect = Imgproc.boundingRect(contour)
+            }
+            contour.release()
+        }
+
+        if (bestRect != null) {
+            Log.d(TAG, "Dialog at $bestRect (area=${bestArea.toInt()})")
+        } else {
+            Log.d(TAG, "No dialog found")
+        }
+        return bestRect
+    }
+
+    /**
      * Produce a debug visualization of the last [detect] call.
      * Must be called before [screenshot] is released.
      *
-     * Pixels matching the green HSV range are shown in colour; all others are greyscaled.
-     * A white circle marks [buttonCenter] if non-null.
+     * Green-matched pixels within the dialog area are shown in colour; all others are
+     * greyscaled.  A white circle marks [buttonCenter] if non-null.
      */
     fun visualize(screenshot: Mat, buttonCenter: PointF?): Bitmap {
         val gray1 = Mat()
@@ -113,7 +175,10 @@ class PassengerDetector {
 
         val viz = gray4.clone()
         gray4.release()
-        screenshot.copyTo(viz, mask)
+        // Use restrictedMask so the visualisation reflects what the detector actually saw.
+        if (!restrictedMask.empty()) {
+            screenshot.copyTo(viz, restrictedMask)
+        }
 
         if (buttonCenter != null) {
             Imgproc.circle(
@@ -133,8 +198,11 @@ class PassengerDetector {
 
     /** Release all pre-allocated Mats.  Call when the detector is no longer needed. */
     fun release() {
+        gray.release()
+        whiteMask.release()
         hsv.release()
         mask.release()
+        restrictedMask.release()
         hierarchy.release()
     }
 
