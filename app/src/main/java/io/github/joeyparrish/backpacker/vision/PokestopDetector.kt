@@ -123,13 +123,14 @@ class PokestopDetector {
                 val mS = meanHsv.`val`[1].toInt()
                 val mV = meanHsv.`val`[2].toInt()
 
-                val discCenterY = bb.y + bb.height / 2
-                val bottomLimit = (normHeight * (1f - DISC_BOTTOM_EXCLUSION_FRAC)).toInt()
+                val discCenterNx = (bb.x + bb.width  / 2f) / normWidth
+                val discCenterNy = (bb.y + bb.height / 2f) / normHeight
+                val exclusionZone = EXCLUSION_ZONES.firstOrNull { it.contains(discCenterNx, discCenterNy) }
                 val verdict = when {
                     bb.height !in minDiscHeight..maxDiscHeight ->
                         "SKIP (h=${bb.height} not in $minDiscHeight..$maxDiscHeight)"
-                    discCenterY >= bottomLimit ->
-                        "SKIP (centerY=$discCenterY >= bottomLimit=$bottomLimit)"
+                    exclusionZone != null ->
+                        "SKIP (centre %.2f,%.2f in exclusion zone ${exclusionZone.label})".format(discCenterNx, discCenterNy)
                     else -> "PASS"
                 }
                 Log.d(TAG, "Contour @ (${bb.x},${bb.y}): " +
@@ -144,7 +145,7 @@ class PokestopDetector {
                 allBounds.add(bounds)
 
                 val passes = bb.height in minDiscHeight..maxDiscHeight
-                        && discCenterY < bottomLimit
+                        && exclusionZone == null
                 if (!passes) {
                     rejectedBounds.add(bounds)
                 } else {
@@ -227,8 +228,22 @@ class PokestopDetector {
     companion object {
         private const val TAG = "Backpacker.PokestopDetector"
 
-        // Discs whose centre falls in the bottom fraction of the screen are excluded —
-        // tapping them risks hitting game UI elements (pokeball bar, etc.).
-        private const val DISC_BOTTOM_EXCLUSION_FRAC = 0.15f
+        private data class ExclusionZone(
+            val label: String,
+            val x1: Float, val y1: Float,
+            val x2: Float, val y2: Float
+        ) {
+            fun contains(nx: Float, ny: Float) = nx in x1..x2 && ny in y1..y2
+        }
+
+        // Normalised (0–1) rectangles covering PoGO UI elements that share Pokéstop cyan.
+        // Measured from a 1080×2400 screenshot.
+        private val EXCLUSION_ZONES = listOf(
+            ExclusionZone("top-right shortcuts",    0.856f, 0.000f, 1.000f, 0.292f),
+            ExclusionZone("bottom-left avatar",     0.000f, 0.870f, 0.308f, 1.000f),
+            ExclusionZone("bottom-center pokeball", 0.364f, 0.903f, 0.636f, 1.000f),
+            ExclusionZone("bottom-right nearby",    0.694f, 0.910f, 1.000f, 1.000f),
+            ExclusionZone("above-bottom-right",     0.861f, 0.850f, 1.000f, 0.921f)
+        )
     }
 }
