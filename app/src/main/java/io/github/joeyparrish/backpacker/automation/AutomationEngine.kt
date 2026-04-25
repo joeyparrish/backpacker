@@ -258,19 +258,14 @@ class AutomationEngine(
         for (attempt in 1..NUM_SPIN_ATTEMPTS) {
             tapperService.swipe(swipeX1, swipeY, swipeX2, swipeY, SWIPE_DURATION_MS)
             finalDiscState = checkDiscState()
-            // Anything other than cyan (or absent while the animation is mid-flight)
-            // means the server has accepted the spin — stop swiping.
-            if (finalDiscState != SpinnerDetector.SpinResult.CYAN) {
+            // Purple means the server accepted the spin — stop swiping.
+            if (finalDiscState == SpinnerDetector.SpinResult.PURPLE) {
                 Log.d(TAG, "Early spin exit after attempt $attempt: state=$finalDiscState")
                 break
             }
         }
 
-        // We know coming into the spin loop above that we were once looking at
-        // cyan.  A failure to detect cyan might be because the spin animation
-        // is still going, in which case we may also fail to detect purple.  So
-        // success isn't purple, it's anything that isn't cyan.
-        val success = finalDiscState != null && finalDiscState != SpinnerDetector.SpinResult.CYAN
+        val success = finalDiscState == SpinnerDetector.SpinResult.PURPLE
 
         val succeededOrFailed = if (success) "succeeded" else "failed"
         if (success) {
