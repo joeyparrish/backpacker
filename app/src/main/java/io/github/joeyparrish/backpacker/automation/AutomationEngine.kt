@@ -50,6 +50,7 @@ class AutomationEngine(
 
     suspend fun run() {
         Log.i(TAG, "AutomationEngine starting")
+        val tRunStart = System.currentTimeMillis()
 
         // Initialise the HUD stats line so the user sees "0 spins (0.0/hr)" immediately
         // rather than a blank second line.
@@ -57,6 +58,7 @@ class AutomationEngine(
 
         if (debugSpinner) {
             runSpinnerDebugCheck()
+            Log.d(TAG, "perf: debug total=${System.currentTimeMillis() - tRunStart}ms")
             // Pause via the service so the FAB resets to IDLE and the notification updates.
             // The Intent is processed after this coroutine returns, so there is no cancel race.
             withContext(Dispatchers.Main) { AutomationService.pause(context) }
