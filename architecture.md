@@ -144,12 +144,11 @@ run()
     │   │   ├─ PURPLE → already spun → back(), return false
     │   │   └─ CYAN → proceed
     │   │
-    │   ├─ 10 × swipe(left→right, SWIPE_DURATION_MS)
+    │   ├─ up to NUM_SPIN_ATTEMPTS × [swipe(left→right, SWIPE_DURATION_MS) → checkDiscState()]
     │   │   (swipe() is suspend; each call waits for gesture completion)
-    │   ├─ sleep SPIN_RESULT_DELAY_MS
+    │   │   Break early if state != CYAN (server accepted the spin)
     │   │
-    │   ├─ checkDiscState() - final check
-    │   │   └─ success = (state != null && state != CYAN)
+    │   ├─ success = (finalState != null && finalState != CYAN)
     │   │
     │   ├─ back()
     │   ├─ if success → sessionSpins++, lifetime_spins++ (SharedPrefs)

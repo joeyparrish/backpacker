@@ -189,12 +189,16 @@ class AutomationEngine(
     }
 
     private suspend fun checkDiscState(): SpinnerDetector.SpinResult? {
+        val tCapture = System.currentTimeMillis()
         val check = screenshotService.capture()
+        val tDetect = System.currentTimeMillis()
         val state = if (check != null) {
             spinnerDetector.detectState(check).also { check.release() }
         } else {
             null
         }
+        val tDone = System.currentTimeMillis()
+        Log.d(TAG, "perf: spinner capture=${tDetect - tCapture}ms  detect=${tDone - tDetect}ms  state=$state")
         return state
     }
 
@@ -243,24 +247,29 @@ class AutomationEngine(
         failureBitmap?.recycle()
 
         // Swipe horizontally across the centre of the screen to spin the
-        // circle.  Do it several time rapidly.  This fires off several network
-        // requests and deals with little GPS issues while driving, at very
-        // little cost.  No need to verify each spin and retry.  And extra
-        // spins after success will just settle the animation more quickly so
-        // the detector can run better afterwards.
+        // circle.  After each swipe, check the colour — break early if we
+        // already see a non-cyan result so we stop swiping once the server
+        // responds.  The checkDiscState() call also provides per-call timing
+        // data (capture + detectState) in logcat.
         val swipeY  = deviceHeight * 0.5f
         val swipeX1 = deviceWidth  * 0.25f
         val swipeX2 = deviceWidth  * 0.75f
+        var finalDiscState: SpinnerDetector.SpinResult? = null
         for (attempt in 1..NUM_SPIN_ATTEMPTS) {
             tapperService.swipe(swipeX1, swipeY, swipeX2, swipeY, SWIPE_DURATION_MS)
+            finalDiscState = checkDiscState()
+            // Anything other than cyan (or absent while the animation is mid-flight)
+            // means the server has accepted the spin — stop swiping.
+            if (finalDiscState != SpinnerDetector.SpinResult.CYAN) {
+                Log.d(TAG, "Early spin exit after attempt $attempt: state=$finalDiscState")
+                break
+            }
         }
-        delay(SPIN_RESULT_DELAY_MS)
 
         // We know coming into the spin loop above that we were once looking at
         // cyan.  A failure to detect cyan might be because the spin animation
         // is still going, in which case we may also fail to detect purple.  So
         // success isn't purple, it's anything that isn't cyan.
-        val finalDiscState = checkDiscState()
         val success = finalDiscState != null && finalDiscState != SpinnerDetector.SpinResult.CYAN
 
         val succeededOrFailed = if (success) "succeeded" else "failed"
@@ -439,7 +448,6 @@ class AutomationEngine(
         private const val OPEN_DELAY_MS           =   700L  // wait for detail view animation
         private const val SWIPE_DURATION_MS       =   300L  // swipe gesture length
         private const val NUM_SPIN_ATTEMPTS       =     7L  // spin this many times
-        private const val SPIN_RESULT_DELAY_MS    =   300L  // delay before checking spin result
         private const val SCAN_IMMEDIATELY_MS     = 1_200L  // scan "right away", but with time for the "back to map" animation to settle
 
         private const val MAX_FAILURE_SCREENSHOTS = 30
