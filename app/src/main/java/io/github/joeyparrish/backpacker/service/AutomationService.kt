@@ -187,7 +187,7 @@ class AutomationService : Service() {
 
         val intervalMs = when (mode) {
             ScanMode.HOUSE -> 60_000L   // sitting still — scan once per minute
-            ScanMode.CAR   ->  2_000L   // driving — scan once per 2 seconds
+            ScanMode.CAR   ->  1_000L   // driving — scan once per second
         }
 
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
