@@ -59,6 +59,11 @@ class SpinnerDetector {
     private var ringMask   = Mat()
     private var ringPixels = 0f
 
+    // purpleRingMask is the ring mask intersected with a narrow vertical center strip.
+    // purpleRingPixels caches countNonZero(purpleRingMask).
+    private var purpleRingMask   = Mat()
+    private var purpleRingPixels = 0f
+
     // Last-computed ratios from detectState(); read by visualize() to draw the text overlay.
     private var lastPurpleRatio = 0f
     private var lastCyanRatio   = 0f
@@ -91,14 +96,29 @@ class SpinnerDetector {
             Imgproc.circle(ringMask, center, innerR, Scalar(  0.0), -1)
             ringPixels = Core.countNonZero(ringMask).toFloat()
 
+            // Build purple ring mask: ring mask intersected with a narrow vertical
+            // center strip (PURPLE_CENTER_WIDTH_FRAC wide, full height).
+            purpleRingMask.release()
+            val stripHalf = (w * PURPLE_CENTER_WIDTH_FRAC / 2.0).toInt()
+            val stripL    = (w / 2) - stripHalf
+            val stripR    = (w / 2) + stripHalf
+            purpleRingMask = Mat.zeros(h, w, CvType.CV_8UC1)
+            Imgproc.rectangle(purpleRingMask,
+                Point(stripL.toDouble(), 0.0),
+                Point(stripR.toDouble(), h.toDouble()),
+                Scalar(255.0), -1)
+            Core.bitwise_and(purpleRingMask, ringMask, purpleRingMask)
+            purpleRingPixels = Core.countNonZero(purpleRingMask).toFloat()
+
             Log.d(TAG, "Ring mask built: center=(${cx.toInt()},${cy.toInt()}) " +
-                       "outerR=$outerR innerR=$innerR pixels=${ringPixels.toInt()}")
+                       "outerR=$outerR innerR=$innerR pixels=${ringPixels.toInt()} " +
+                       "purpleStripX=[$stripL,$stripR] purplePixels=${purpleRingPixels.toInt()}")
         }
 
-        // Check purple (spun).
+        // Check purple (spun) — only within the narrow vertical center strip of the ring.
         Core.inRange(hsv, spunHsvLower, spunHsvUpper, colorMask)
-        Core.bitwise_and(colorMask, ringMask, combined)
-        val purpleRatio = Core.countNonZero(combined) / ringPixels
+        Core.bitwise_and(colorMask, purpleRingMask, combined)
+        val purpleRatio = Core.countNonZero(combined) / purpleRingPixels
         lastPurpleRatio = purpleRatio
         Log.d(TAG, "Purple ring ratio: $purpleRatio")
         if (purpleRatio > RING_DETECT_THRESHOLD) {
@@ -149,6 +169,14 @@ class SpinnerDetector {
             val white  = Scalar(255.0, 255.0, 255.0, 255.0)
             Imgproc.circle(viz, center, outerR, white, 3)
             Imgproc.circle(viz, center, innerR, white, 3)
+
+            // Draw the purple center-strip boundaries in yellow.
+            val stripHalf = (w * PURPLE_CENTER_WIDTH_FRAC / 2.0).toInt()
+            val stripL    = (w / 2) - stripHalf
+            val stripR    = (w / 2) + stripHalf
+            val yellow    = Scalar(255.0, 255.0, 0.0, 255.0)
+            Imgproc.line(viz, Point(stripL.toDouble(), 0.0), Point(stripL.toDouble(), h.toDouble()), yellow, 2)
+            Imgproc.line(viz, Point(stripR.toDouble(), 0.0), Point(stripR.toDouble(), h.toDouble()), yellow, 2)
         }
 
         // Draw ratio text at bottom in white on a black box.
@@ -182,6 +210,7 @@ class SpinnerDetector {
         colorMask.release()
         combined.release()
         ringMask.release()
+        purpleRingMask.release()
     }
 
     companion object {
@@ -202,5 +231,10 @@ class SpinnerDetector {
 
         // Minimum fraction of ring pixels that must match a colour to report that state.
         private const val RING_DETECT_THRESHOLD = 0.70f
+
+        // Width of the vertical center strip used to constrain purple detection,
+        // as a fraction of frame width.  Only the ring pixels within this strip
+        // are checked for purple; the ratio is computed against strip-ring pixels only.
+        private const val PURPLE_CENTER_WIDTH_FRAC = 0.08
     }
 }
