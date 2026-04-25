@@ -391,7 +391,9 @@ class AutomationEngine(
     private suspend fun runSpinnerDebugCheck() {
         Log.d(TAG, "Spinner debug: capturing screenshot")
 
+        val t0 = System.currentTimeMillis()
         val shot = screenshotService.capture()
+        val t1 = System.currentTimeMillis()
         if (shot == null) {
             Log.w(TAG, "Spinner debug: screenshot failed")
             updateHud("Screenshot failed")
@@ -399,8 +401,11 @@ class AutomationEngine(
         }
 
         val state = spinnerDetector.detectState(shot)
+        val t2 = System.currentTimeMillis()
         val bitmap: Bitmap = spinnerDetector.visualize(shot)
+        val t3 = System.currentTimeMillis()
         shot.release()
+        Log.d(TAG, "perf: capture=${t1-t0}ms  detect=${t2-t1}ms  visualize=${t3-t2}ms  total=${t3-t0}ms")
 
         val message = when (state) {
             SpinnerDetector.SpinResult.CYAN   -> "Spinner: cyan (ready)"
