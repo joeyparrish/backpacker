@@ -50,8 +50,6 @@ class AutomationEngine(
 
     suspend fun run() {
         Log.i(TAG, "AutomationEngine starting")
-        // Brief pause so any UI state changes (FAB icon, overlays) settle before first capture.
-        delay(SETTLE_DELAY_MS)
 
         // Initialise the HUD stats line so the user sees "0 spins (0.0/hr)" immediately
         // rather than a blank second line.
@@ -436,7 +434,6 @@ class AutomationEngine(
         private const val SCREEN_OFF_POLL_MS      = 5_000L
 
         // Timing constants
-        private const val SETTLE_DELAY_MS         =   500L  // FAB/overlay settle after activation
         private const val DISMISS_DELAY_MS        =   800L  // wait for speed-warning dialog to animate away
         private const val CAPTURE_RETRY_MS        = 2_000L  // VirtualDisplay not ready yet
         private const val ERROR_RECOVERY_DELAY_MS = 5_000L  // pause after unexpected scan error
