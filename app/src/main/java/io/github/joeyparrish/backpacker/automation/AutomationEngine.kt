@@ -273,14 +273,10 @@ class AutomationEngine(
                 saveFailureScreenshot(failureBitmap)  // recycles bitmap
             }
 
-            // TODO: How we should back out from this state depends on other
-            // elements on screen.  If we tapped a stop (identify by X in
-            // bottom center), we should tap the X (though back gesture is also
-            // OK).  If we are still in the map (identify by pokeball in bottom
-            // center), we shouldn't do anything.  If we are in some other
-            // state, like we tapped a Pokemon, we should gesture "back".
-            // For now, and because these ideal checks would be complex, do
-            // nothing.
+            // Don't try to back out here — the next scanLoop() iteration will
+            // run ExitButtonDetector (catches a stop/gym detail we accidentally
+            // opened) and EscapeButtonDetector (catches a Pokémon encounter),
+            // and tap the right button for whatever screen we landed on.
             return false
         } else if (initialDiscState == SpinnerDetector.SpinResult.PURPLE) {
             Log.w(TAG, "Disc not ready - scan again")
