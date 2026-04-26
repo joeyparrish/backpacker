@@ -42,8 +42,8 @@ class SpinnerDetector {
     enum class SpinResult { CYAN, PURPLE, ABSENT }
 
     /** HSV bounds for the spun (purple) colour. */
-    private val spunHsvLower = Scalar(120.0,  75.0, 165.0)
-    private val spunHsvUpper = Scalar(155.0, 160.0, 255.0)
+    private val spunHsvLower = Scalar(114.0,  75.0, 165.0)
+    private val spunHsvUpper = Scalar(155.0, 201.0, 255.0)
 
     /** HSV bounds for the ready-to-spin (cyan/blue) colour. */
     private val cyanHsvLower = Scalar( 90.0, 175.0, 155.0)
