@@ -415,10 +415,14 @@ class AutomationEngine(
             SpinnerDetector.SpinResult.ABSENT -> "Spinner: absent"
         }
         Log.i(TAG, message)
+        val t4 = System.currentTimeMillis()
         updateHud(message)
+        val t5 = System.currentTimeMillis()
         withContext(Dispatchers.Main) {
             tapperService.showDebugImage(bitmap)
         }
+        val t6 = System.currentTimeMillis()
+        Log.d(TAG, "perf: updateHud=${t5-t4}ms  showDebugImage=${t6-t5}ms")
     }
 
     companion object {
