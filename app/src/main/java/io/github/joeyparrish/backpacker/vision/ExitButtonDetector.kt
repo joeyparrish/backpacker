@@ -112,7 +112,6 @@ class ExitButtonDetector {
         Imgproc.cvtColor(screenshot, hsv, Imgproc.COLOR_RGBA2RGB)
         Imgproc.cvtColor(hsv, hsv, Imgproc.COLOR_RGB2HSV)
 
-        lastMatchIndex = -1
         for ((idx, c) in candidates.withIndex()) {
             Core.inRange(hsv, whiteHsvLower, whiteHsvUpper, colorMask)
             Core.bitwise_and(colorMask, c.mask, masked)
@@ -123,13 +122,26 @@ class ExitButtonDetector {
             c.aquaRatio = Core.countNonZero(masked) / c.pixels
 
             Log.d(TAG, "Candidate $idx (NY=%.3f): white=${c.whiteRatio}  aqua=${c.aquaRatio}".format(c.centerNY))
+        }
 
-            if (lastMatchIndex < 0 &&
-                (c.whiteRatio >= DETECT_THRESHOLD || c.aquaRatio >= DETECT_THRESHOLD)) {
-                lastMatchIndex = idx
-                Log.i(TAG, "Exit button detected at candidate $idx " +
-                    "(white=%.1f%%  aqua=%.1f%%)".format(c.whiteRatio * 100f, c.aquaRatio * 100f))
+        // Pick the candidate with the strongest signal (max of white/aqua ratios) that
+        // also clears the threshold.  Using the first-over-threshold candidate would
+        // mis-select when a lower candidate partially overlaps a button centred on a
+        // higher one (e.g. menu position at NY=0.929 bleeds into the NY=0.941 circle).
+        lastMatchIndex = candidates.indices
+            .filter { idx ->
+                val c = candidates[idx]
+                c.whiteRatio >= DETECT_THRESHOLD || c.aquaRatio >= DETECT_THRESHOLD
             }
+            .maxByOrNull { idx ->
+                val c = candidates[idx]
+                maxOf(c.whiteRatio, c.aquaRatio)
+            } ?: -1
+
+        if (lastMatchIndex >= 0) {
+            val c = candidates[lastMatchIndex]
+            Log.i(TAG, "Exit button detected at candidate $lastMatchIndex " +
+                "(white=%.1f%%  aqua=%.1f%%)".format(c.whiteRatio * 100f, c.aquaRatio * 100f))
         }
 
         return if (lastMatchIndex >= 0) {
