@@ -448,7 +448,7 @@ class AutomationEngine(
         private const val DISMISS_DELAY_MS        =   800L  // wait for speed-warning dialog to animate away
         private const val CAPTURE_RETRY_MS        = 2_000L  // VirtualDisplay not ready yet
         private const val ERROR_RECOVERY_DELAY_MS = 5_000L  // pause after unexpected scan error
-        private const val OPEN_DELAY_MS           =   700L  // wait for detail view animation
+        private const val OPEN_DELAY_MS           =   900L  // wait between tap & spin
         private const val SWIPE_DURATION_MS       =   300L  // swipe gesture length
         private const val NUM_SPIN_ATTEMPTS       =     7L  // spin this many times
         private const val SCAN_IMMEDIATELY_MS     = 1_200L  // scan "right away", but with time for the "back to map" animation to settle
