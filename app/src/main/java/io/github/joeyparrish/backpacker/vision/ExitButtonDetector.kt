@@ -18,18 +18,23 @@ import org.opencv.imgproc.Imgproc
  * Detects the bottom-centre exit button used across multiple PoGO screens (gym, menu,
  * egg viewer, Pokémon viewer, etc.) and returns its centre as a tap target.
  *
- * The button is always a circle of fixed size at a fixed position, so detection uses
- * a pre-built circular mask rather than contour search.  Two colour variants exist:
+ * The button is always a circle of fixed size, but its Y position varies by screen type:
+ *
+ *   Standard position (NY=0.941) — gym, spinner screen, most views.
+ *   Menu position    (NY=0.929) — main menu, bag, egg viewer, Pokémon viewer.
+ *
+ * Two colour variants exist:
  *
  *   White variant  — white fill, aqua outline + X icon (gym / raid / battle screens).
  *   Green variant  — aqua fill, yellow-green icon (menus, egg viewer, Pokémon viewer).
  *
  * Detection strategy:
- *   1. Build a filled circular mask at the known button position once per frame size.
+ *   1. Build a filled circular mask for each candidate position once per frame size.
  *   2. Convert RGBA → HSV.
- *   3. Measure the fraction of circle pixels that match the white range (low S, high V).
- *   4. Measure the fraction that match the aqua range.
- *   5. If either fraction exceeds [DETECT_THRESHOLD], return the button centre.
+ *   3. For each candidate, measure the fraction of circle pixels matching the white
+ *      range (low S, high V) and the aqua range.
+ *   4. Return the centre of the first candidate whose fraction exceeds [DETECT_THRESHOLD]
+ *      so the tap lands on the actual button.
  *
  * Checked before [PassengerDetector] in the scan loop: the buddy screen shows both a
  * large "play" button (which PassengerDetector matches) and this exit button, so exit
@@ -39,7 +44,10 @@ import org.opencv.imgproc.Imgproc
  */
 class ExitButtonDetector {
 
-    /** HSV range for the white button fill (white variant). */
+    /**
+     * HSV range for the white button fill (white variant).
+     * The button is an off-white/light-grey; saturation up to ~30 is needed.
+     */
     private val whiteHsvLower = Scalar(  0.0,   0.0, 235.0)
     private val whiteHsvUpper = Scalar(180.0,  30.0, 255.0)
 
@@ -52,20 +60,29 @@ class ExitButtonDetector {
     private val aquaHsvLower  = Scalar( 90.0, 200.0, 145.0)
     private val aquaHsvUpper  = Scalar( 98.0, 212.0, 157.0)
 
+    /** Per-candidate state: mask, pixel count, last-computed ratios. */
+    private inner class Candidate(val centerNX: Float, val centerNY: Float) {
+        var mask       = Mat()
+        var pixels     = 0f
+        var whiteRatio = 0f
+        var aquaRatio  = 0f
+    }
+
+    private val candidates = listOf(
+        Candidate(BUTTON_CENTER_NX, BUTTON_CENTER_NY_STANDARD),
+        Candidate(BUTTON_CENTER_NX, BUTTON_CENTER_NY_MENU),
+    )
+
+    /** Union of all candidate masks — used by [visualize] to colour all circle interiors. */
+    private var allMask = Mat()
+
     // Pre-allocated scratch Mats.
-    private val hsv           = Mat()
-    private val colorMask     = Mat()
-    private val whiteCombined = Mat()
-    private val aquaCombined  = Mat()
-    private val combined      = Mat()   // OR of both; read by visualize()
+    private val hsv       = Mat()
+    private val colorMask = Mat()
+    private val masked    = Mat()
 
-    // buttonMask is built once from the first frame's dimensions and reused thereafter.
-    private var buttonMask   = Mat()
-    private var buttonPixels = 0f
-
-    // Last-computed ratios from detect(); read by visualize() for the text overlay.
-    private var lastWhiteRatio = 0f
-    private var lastAquaRatio  = 0f
+    /** Index into [candidates] of the last match, or -1 if none. */
+    private var lastMatchIndex = -1
 
     /**
      * Detect the exit button in [screenshot] (720p RGBA Mat from ScreenshotService).
@@ -76,48 +93,58 @@ class ExitButtonDetector {
         val w = screenshot.cols()
         val h = screenshot.rows()
 
-        if (buttonMask.rows() != h || buttonMask.cols() != w) {
-            buttonMask.release()
-            buttonMask = Mat.zeros(h, w, CvType.CV_8UC1)
-            val cx = BUTTON_CENTER_NX * w
-            val cy = BUTTON_CENTER_NY * h
-            val r  = (BUTTON_RADIUS_NX * w).toInt()
-            Imgproc.circle(buttonMask, Point(cx.toDouble(), cy.toDouble()), r, Scalar(255.0), -1)
-            buttonPixels = Core.countNonZero(buttonMask).toFloat()
-            Log.d(TAG, "Button mask built: center=(${cx.toInt()},${cy.toInt()}) r=$r pixels=${buttonPixels.toInt()}")
+        if (allMask.rows() != h || allMask.cols() != w) {
+            allMask.release()
+            allMask = Mat.zeros(h, w, CvType.CV_8UC1)
+            for (c in candidates) {
+                c.mask.release()
+                c.mask = Mat.zeros(h, w, CvType.CV_8UC1)
+                val cx = c.centerNX * w
+                val cy = c.centerNY * h
+                val r  = (BUTTON_RADIUS_NX * w).toInt()
+                Imgproc.circle(c.mask, Point(cx.toDouble(), cy.toDouble()), r, Scalar(255.0), -1)
+                c.pixels = Core.countNonZero(c.mask).toFloat()
+                Core.bitwise_or(allMask, c.mask, allMask)
+                Log.d(TAG, "Candidate mask built: center=(${cx.toInt()},${cy.toInt()}) r=$r pixels=${c.pixels.toInt()}")
+            }
         }
 
         Imgproc.cvtColor(screenshot, hsv, Imgproc.COLOR_RGBA2RGB)
         Imgproc.cvtColor(hsv, hsv, Imgproc.COLOR_RGB2HSV)
 
-        Core.inRange(hsv, whiteHsvLower, whiteHsvUpper, colorMask)
-        Core.bitwise_and(colorMask, buttonMask, whiteCombined)
-        lastWhiteRatio = Core.countNonZero(whiteCombined) / buttonPixels
+        lastMatchIndex = -1
+        for ((idx, c) in candidates.withIndex()) {
+            Core.inRange(hsv, whiteHsvLower, whiteHsvUpper, colorMask)
+            Core.bitwise_and(colorMask, c.mask, masked)
+            c.whiteRatio = Core.countNonZero(masked) / c.pixels
 
-        Core.inRange(hsv, aquaHsvLower, aquaHsvUpper, colorMask)
-        Core.bitwise_and(colorMask, buttonMask, aquaCombined)
-        lastAquaRatio = Core.countNonZero(aquaCombined) / buttonPixels
+            Core.inRange(hsv, aquaHsvLower, aquaHsvUpper, colorMask)
+            Core.bitwise_and(colorMask, c.mask, masked)
+            c.aquaRatio = Core.countNonZero(masked) / c.pixels
 
-        // Merge for visualize() regardless of outcome.
-        Core.bitwise_or(whiteCombined, aquaCombined, combined)
+            Log.d(TAG, "Candidate $idx (NY=%.3f): white=${c.whiteRatio}  aqua=${c.aquaRatio}".format(c.centerNY))
 
-        Log.d(TAG, "White ratio: $lastWhiteRatio  Aqua ratio: $lastAquaRatio")
-
-        val found = lastWhiteRatio >= DETECT_THRESHOLD || lastAquaRatio >= DETECT_THRESHOLD
-        if (found) {
-            Log.i(TAG, "Exit button detected (white=%.1f%%  aqua=%.1f%%)".format(
-                lastWhiteRatio * 100f, lastAquaRatio * 100f))
+            if (lastMatchIndex < 0 &&
+                (c.whiteRatio >= DETECT_THRESHOLD || c.aquaRatio >= DETECT_THRESHOLD)) {
+                lastMatchIndex = idx
+                Log.i(TAG, "Exit button detected at candidate $idx " +
+                    "(white=%.1f%%  aqua=%.1f%%)".format(c.whiteRatio * 100f, c.aquaRatio * 100f))
+            }
         }
-        return if (found) PointF(BUTTON_CENTER_NX * w, BUTTON_CENTER_NY * h) else null
+
+        return if (lastMatchIndex >= 0) {
+            val c = candidates[lastMatchIndex]
+            PointF(c.centerNX * w, c.centerNY * h)
+        } else null
     }
 
     /**
      * Produce a debug visualization of the last [detect] call.
      * Must be called before [screenshot] is released.
      *
-     * Pixels within the button circle that matched either the white or aqua range are
-     * shown in their original colour; all other pixels are greyscaled.  The circle
-     * outline is drawn in yellow if the button was found, red otherwise.
+     * All pixels within any candidate circle are shown in their original colour.
+     * Each circle is outlined in yellow if it was the matched candidate, red otherwise.
+     * Per-candidate ratio text is shown at the bottom.
      */
     fun visualize(screenshot: Mat, result: PointF?): Bitmap {
         val w = screenshot.cols()
@@ -132,35 +159,49 @@ class ExitButtonDetector {
         val viz = gray4.clone()
         gray4.release()
 
-        // Show all pixels inside the circle in their original colour so the actual
-        // button colours are visible regardless of whether they matched a range.
-        if (!buttonMask.empty()) {
-            screenshot.copyTo(viz, buttonMask)
+        if (!allMask.empty()) {
+            // Show all pixels inside any candidate circle in their original colour so
+            // the actual button colours are visible regardless of whether they matched.
+            screenshot.copyTo(viz, allMask)
 
-            val cx = BUTTON_CENTER_NX * w
-            val cy = BUTTON_CENTER_NY * h
-            val r  = (BUTTON_RADIUS_NX * w).toInt()
-            Imgproc.circle(viz, Point(cx.toDouble(), cy.toDouble()), r,
-                Scalar(255.0, 0.0, 0.0, 255.0), 3)   // red outline always
+            for ((idx, c) in candidates.withIndex()) {
+                val cx = c.centerNX * w
+                val cy = c.centerNY * h
+                val r  = (BUTTON_RADIUS_NX * w).toInt()
+                val color = if (idx == lastMatchIndex)
+                    Scalar(255.0, 255.0, 0.0, 255.0)   // yellow — matched
+                else
+                    Scalar(255.0, 0.0, 0.0, 255.0)     // red — not matched
+                Imgproc.circle(viz, Point(cx.toDouble(), cy.toDouble()), r, color, 3)
+            }
         }
 
-        val text = "white=%.1f%%  aqua=%.1f%%".format(lastWhiteRatio * 100f, lastAquaRatio * 100f)
+        // Build one text line per candidate; prefix matched line with "*".
+        val lines = candidates.mapIndexed { idx, c ->
+            val tag = if (idx == lastMatchIndex) "*" else " "
+            "$tag[${idx}] white=%.1f%%  aqua=%.1f%%".format(c.whiteRatio * 100f, c.aquaRatio * 100f)
+        }
+
         val fontFace  = Imgproc.FONT_HERSHEY_SIMPLEX
-        val fontScale = 1.2
+        val fontScale = 1.0
         val fontThick = 2
+        val pad       = 12
         val baseLine  = IntArray(1)
-        val textSize  = Imgproc.getTextSize(text, fontFace, fontScale, fontThick, baseLine)
-        val pad    = 12
-        val textX  = pad
-        val textY  = h - pad - baseLine[0]
-        val boxTop = h - textSize.height.toInt() - baseLine[0] - pad * 2
+        val lineHeight = Imgproc.getTextSize("X", fontFace, fontScale, fontThick, baseLine)
+            .height.toInt() + baseLine[0] + pad
+
+        val boxHeight = lineHeight * lines.size + pad
         Imgproc.rectangle(viz,
-            Point(0.0, boxTop.toDouble()),
-            Point((textSize.width + pad * 2).toDouble(), h.toDouble()),
+            Point(0.0, (h - boxHeight).toDouble()),
+            Point(w.toDouble(), h.toDouble()),
             Scalar(0.0, 0.0, 0.0, 200.0), -1)
-        Imgproc.putText(viz, text,
-            Point(textX.toDouble(), textY.toDouble()),
-            fontFace, fontScale, Scalar(255.0, 255.0, 255.0, 255.0), fontThick)
+
+        for ((i, line) in lines.withIndex()) {
+            val textY = h - boxHeight + pad + lineHeight * i + lineHeight - baseLine[0]
+            Imgproc.putText(viz, line,
+                Point(pad.toDouble(), textY.toDouble()),
+                fontFace, fontScale, Scalar(255.0, 255.0, 255.0, 255.0), fontThick)
+        }
 
         val bitmap = Bitmap.createBitmap(viz.cols(), viz.rows(), Bitmap.Config.ARGB_8888)
         Utils.matToBitmap(viz, bitmap)
@@ -172,20 +213,22 @@ class ExitButtonDetector {
     fun release() {
         hsv.release()
         colorMask.release()
-        whiteCombined.release()
-        aquaCombined.release()
-        combined.release()
-        buttonMask.release()
+        masked.release()
+        allMask.release()
+        for (c in candidates) {
+            c.mask.release()
+        }
     }
 
     companion object {
         private const val TAG = "Backpacker.ExitButtonDetector"
 
         // Button geometry in normalised coords (measured from a 1080×2400 screenshot).
-        // Centre (540, 2259), diameter 104 px.
-        private const val BUTTON_CENTER_NX = 0.500f   //  540 / 1080
-        private const val BUTTON_CENTER_NY = 0.941f   // 2259 / 2400
-        private const val BUTTON_RADIUS_NX = 0.048f   //   52 / 1080
+        // Diameter 104 px → radius 52 px.
+        private const val BUTTON_CENTER_NX           = 0.500f  //  540 / 1080
+        private const val BUTTON_CENTER_NY_STANDARD  = 0.941f  // 2259 / 2400 — gym, spinner, most views
+        private const val BUTTON_CENTER_NY_MENU      = 0.929f  // 2230 / 2400 — menu, bag, egg, Pokémon viewer
+        private const val BUTTON_RADIUS_NX           = 0.048f  //   52 / 1080
 
         // Minimum fraction of circle pixels matching a colour to report a button present.
         // White variant: ~60-70% white fill.  Green variant: ~60-70% aqua fill.
