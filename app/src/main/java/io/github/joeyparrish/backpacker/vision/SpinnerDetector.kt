@@ -50,9 +50,10 @@ class SpinnerDetector {
     private val cyanHsvUpper = Scalar(115.0, 240.0, 255.0)
 
     // Pre-allocated scratch Mats — reused across detectState() calls.
-    private val hsv       = Mat()
-    private val colorMask = Mat()
-    private val combined  = Mat()
+    private val hsv            = Mat()
+    private val colorMask      = Mat()
+    private val combined       = Mat()  // holds the winning colour mask; read by visualize()
+    private val purpleCombined = Mat()  // holds the purple result until we know the winner
 
     // ringMask is built once from the first frame's dimensions and reused thereafter.
     // ringPixels caches countNonZero(ringMask) so we don't recompute it every call.
@@ -117,12 +118,13 @@ class SpinnerDetector {
 
         // Check purple (spun) — only within the narrow vertical center strip of the ring.
         Core.inRange(hsv, spunHsvLower, spunHsvUpper, colorMask)
-        Core.bitwise_and(colorMask, purpleRingMask, combined)
-        val purpleRatio = Core.countNonZero(combined) / purpleRingPixels
+        Core.bitwise_and(colorMask, purpleRingMask, purpleCombined)
+        val purpleRatio = Core.countNonZero(purpleCombined) / purpleRingPixels
         lastPurpleRatio = purpleRatio
         Log.d(TAG, "Purple ring ratio: $purpleRatio")
         if (purpleRatio > RING_DETECT_THRESHOLD) {
             lastCyanRatio = 0f
+            purpleCombined.copyTo(combined)
             return SpinResult.PURPLE
         }
 
@@ -133,6 +135,9 @@ class SpinnerDetector {
         lastCyanRatio = cyanRatio
         Log.d(TAG, "Cyan ring ratio: $cyanRatio")
         if (cyanRatio > RING_DETECT_THRESHOLD) return SpinResult.CYAN
+
+        // Neither threshold met — show whichever colour had more matching pixels in the debug view.
+        if (lastPurpleRatio > lastCyanRatio) purpleCombined.copyTo(combined)
 
         return SpinResult.ABSENT
     }
@@ -209,6 +214,7 @@ class SpinnerDetector {
         hsv.release()
         colorMask.release()
         combined.release()
+        purpleCombined.release()
         ringMask.release()
         purpleRingMask.release()
     }
