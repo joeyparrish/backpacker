@@ -200,7 +200,19 @@ class PokestopDetector {
         gray4.release()
         screenshot.copyTo(viz, mask)
 
+        val w = viz.cols()
+        val h = viz.rows()
         val thickness = 3
+
+        // Draw the spin-radius ellipse in green.
+        Imgproc.ellipse(
+            viz,
+            Point(SPIN_CENTER_NX * w, SPIN_CENTER_NY * h),
+            org.opencv.core.Size(SPIN_RADIUS_NX * w, SPIN_RADIUS_NY * h),
+            0.0, 0.0, 360.0,
+            Scalar(0.0, 255.0, 0.0, 255.0), thickness
+        )
+
         for (disc in result.passed) {
             Imgproc.rectangle(
                 viz,
