@@ -22,6 +22,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.google.android.material.switchmaterial.SwitchMaterial
 import io.github.joeyparrish.backpacker.BuildConfig
 import io.github.joeyparrish.backpacker.R
 import io.github.joeyparrish.backpacker.automation.AutomationEngine
@@ -109,95 +110,7 @@ class MainActivity : AppCompatActivity() {
             if (checked) enableOverlay() else disableOverlay()
         }
 
-        binding.switchDebugScan.setOnCheckedChangeListener { _, checked ->
-            if (updatingDebugSwitches) return@setOnCheckedChangeListener
-            AutomationEngine.debugScan = checked
-            if (checked) {
-                updatingDebugSwitches = true
-                binding.switchSpinnerDebug.isChecked = false
-                AutomationEngine.debugSpinner = false
-                binding.switchSaveFailures.isChecked = false
-                AutomationEngine.saveFailureScreenshots = false
-                binding.switchPassengerDebug.isChecked = false
-                AutomationEngine.debugPassenger = false
-                binding.switchExitButtonDebug.isChecked = false
-                AutomationEngine.debugExitButton = false
-                updatingDebugSwitches = false
-            }
-            OverlayView.skipCarMode = checked
-        }
-
-        binding.switchSpinnerDebug.setOnCheckedChangeListener { _, checked ->
-            if (updatingDebugSwitches) return@setOnCheckedChangeListener
-            AutomationEngine.debugSpinner = checked
-            if (checked) {
-                updatingDebugSwitches = true
-                binding.switchDebugScan.isChecked = false
-                AutomationEngine.debugScan = false
-                binding.switchSaveFailures.isChecked = false
-                AutomationEngine.saveFailureScreenshots = false
-                binding.switchPassengerDebug.isChecked = false
-                AutomationEngine.debugPassenger = false
-                binding.switchExitButtonDebug.isChecked = false
-                AutomationEngine.debugExitButton = false
-                updatingDebugSwitches = false
-            }
-            OverlayView.skipCarMode = checked
-        }
-
-        binding.switchSaveFailures.setOnCheckedChangeListener { _, checked ->
-            if (updatingDebugSwitches) return@setOnCheckedChangeListener
-            AutomationEngine.saveFailureScreenshots = checked
-            if (checked) {
-                updatingDebugSwitches = true
-                binding.switchDebugScan.isChecked = false
-                AutomationEngine.debugScan = false
-                binding.switchSpinnerDebug.isChecked = false
-                AutomationEngine.debugSpinner = false
-                binding.switchPassengerDebug.isChecked = false
-                AutomationEngine.debugPassenger = false
-                binding.switchExitButtonDebug.isChecked = false
-                AutomationEngine.debugExitButton = false
-                updatingDebugSwitches = false
-            }
-            OverlayView.skipCarMode = false
-        }
-
-        binding.switchPassengerDebug.setOnCheckedChangeListener { _, checked ->
-            if (updatingDebugSwitches) return@setOnCheckedChangeListener
-            AutomationEngine.debugPassenger = checked
-            if (checked) {
-                updatingDebugSwitches = true
-                binding.switchDebugScan.isChecked = false
-                AutomationEngine.debugScan = false
-                binding.switchSpinnerDebug.isChecked = false
-                AutomationEngine.debugSpinner = false
-                binding.switchSaveFailures.isChecked = false
-                AutomationEngine.saveFailureScreenshots = false
-                binding.switchExitButtonDebug.isChecked = false
-                AutomationEngine.debugExitButton = false
-                updatingDebugSwitches = false
-            }
-            OverlayView.skipCarMode = checked
-        }
-
-        binding.switchExitButtonDebug.setOnCheckedChangeListener { _, checked ->
-            if (updatingDebugSwitches) return@setOnCheckedChangeListener
-            AutomationEngine.debugExitButton = checked
-            if (checked) {
-                updatingDebugSwitches = true
-                binding.switchDebugScan.isChecked = false
-                AutomationEngine.debugScan = false
-                binding.switchSpinnerDebug.isChecked = false
-                AutomationEngine.debugSpinner = false
-                binding.switchSaveFailures.isChecked = false
-                AutomationEngine.saveFailureScreenshots = false
-                binding.switchPassengerDebug.isChecked = false
-                AutomationEngine.debugPassenger = false
-                updatingDebugSwitches = false
-            }
-            OverlayView.skipCarMode = checked
-        }
+        setupDebugSwitches()
 
         binding.setupHeader.setOnClickListener {
             setupExpanded = !(setupExpanded ?: true)
@@ -251,19 +164,53 @@ class MainActivity : AppCompatActivity() {
         updateOverlaySwitch()
     }
 
+    /**
+     * Each debug mode: its switch, the engine flag setter, and whether enabling it
+     * should set skipCarMode (saveFailures is the one exception — it never skips car mode).
+     */
+    private data class DebugMode(
+        val switch: SwitchMaterial,
+        val setFlag: (Boolean) -> Unit,
+        val skipCarModeWhenOn: Boolean,
+    )
+
+    private lateinit var debugModes: List<DebugMode>
+
+    private fun setupDebugSwitches() {
+        debugModes = listOf(
+            DebugMode(binding.switchDebugScan,       { AutomationEngine.debugScan = it },              true),
+            DebugMode(binding.switchSpinnerDebug,    { AutomationEngine.debugSpinner = it },           true),
+            DebugMode(binding.switchSaveFailures,    { AutomationEngine.saveFailureScreenshots = it }, false),
+            DebugMode(binding.switchPassengerDebug,  { AutomationEngine.debugPassenger = it },         true),
+            DebugMode(binding.switchExitButtonDebug, { AutomationEngine.debugExitButton = it },        true),
+        )
+
+        for (entry in debugModes) {
+            entry.switch.setOnCheckedChangeListener { _, checked ->
+                if (updatingDebugSwitches) return@setOnCheckedChangeListener
+                entry.setFlag(checked)
+                if (checked) {
+                    updatingDebugSwitches = true
+                    for (other in debugModes) {
+                        if (other !== entry) {
+                            other.switch.isChecked = false
+                            other.setFlag(false)
+                        }
+                    }
+                    updatingDebugSwitches = false
+                }
+                OverlayView.skipCarMode = checked && entry.skipCarModeWhenOn
+            }
+        }
+    }
+
     private fun resetDebugFlags() {
         updatingDebugSwitches = true
-        binding.switchDebugScan.isChecked = false
-        binding.switchSpinnerDebug.isChecked = false
-        binding.switchSaveFailures.isChecked = false
-        binding.switchPassengerDebug.isChecked = false
-        binding.switchExitButtonDebug.isChecked = false
+        for (entry in debugModes) {
+            entry.switch.isChecked = false
+            entry.setFlag(false)
+        }
         updatingDebugSwitches = false
-        AutomationEngine.debugScan = false
-        AutomationEngine.debugSpinner = false
-        AutomationEngine.saveFailureScreenshots = false
-        AutomationEngine.debugPassenger = false
-        AutomationEngine.debugExitButton = false
         OverlayView.skipCarMode = false
     }
 
