@@ -249,10 +249,12 @@ class PokestopDetector {
         // (X by width, Y by height).  The circle in pixel space is expressed as an
         // ellipse in this non-square space; use (dx/rx)²+(dy/ry)²≤1 to test membership.
         // Measured from a 1080×2400 screenshot: character at (540,1520), spin radius top at Y=1080.
-        private const val SPIN_CENTER_NX = 0.500f   // 540  / 1080
+        // The detected disc centroid sits ~118px above the physical base of the stop (pole offset),
+        // so the radius is expanded by 118px to avoid excluding stops whose base is in range.
+        private const val SPIN_CENTER_NX = 0.500f   //  540 / 1080
         private const val SPIN_CENTER_NY = 0.633f   // 1520 / 2400
-        private const val SPIN_RADIUS_NX = 0.407f   // 440  / 1080
-        private const val SPIN_RADIUS_NY = 0.183f   // 440  / 2400
+        private const val SPIN_RADIUS_NX = 0.516f   //  558 / 1080  (440 + 118)
+        private const val SPIN_RADIUS_NY = 0.233f   //  558 / 2400  (440 + 118)
 
         // Normalised (0–1) rectangles covering PoGO UI elements that share Pokéstop cyan.
         // Measured from a 1080×2400 screenshot.
