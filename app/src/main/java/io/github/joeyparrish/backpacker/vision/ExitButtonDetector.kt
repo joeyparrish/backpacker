@@ -49,8 +49,8 @@ class ExitButtonDetector {
      * Measured: white-variant outline H=186/360, S=75/100, V=58/100;
      *           green-variant fill    H=188/360, S=80/100, V=59/100 — effectively identical.
      */
-    private val aquaHsvLower  = Scalar( 88.0, 165.0, 120.0)
-    private val aquaHsvUpper  = Scalar(100.0, 220.0, 175.0)
+    private val aquaHsvLower  = Scalar( 91.0, 186.0, 143.0)
+    private val aquaHsvUpper  = Scalar( 96.0, 209.0, 155.0)
 
     // Pre-allocated scratch Mats.
     private val hsv           = Mat()
