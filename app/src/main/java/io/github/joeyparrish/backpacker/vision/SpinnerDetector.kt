@@ -122,7 +122,7 @@ class SpinnerDetector {
         val purpleRatio = Core.countNonZero(purpleCombined) / purpleRingPixels
         lastPurpleRatio = purpleRatio
         Log.d(TAG, "Purple ring ratio: $purpleRatio")
-        if (purpleRatio > RING_DETECT_THRESHOLD) {
+        if (purpleRatio > PURPLE_DETECT_THRESHOLD) {
             lastCyanRatio = 0f
             purpleCombined.copyTo(combined)
             return SpinResult.PURPLE
@@ -134,7 +134,7 @@ class SpinnerDetector {
         val cyanRatio = Core.countNonZero(combined) / ringPixels
         lastCyanRatio = cyanRatio
         Log.d(TAG, "Cyan ring ratio: $cyanRatio")
-        if (cyanRatio > RING_DETECT_THRESHOLD) return SpinResult.CYAN
+        if (cyanRatio > CYAN_DETECT_THRESHOLD) return SpinResult.CYAN
 
         // Neither threshold met — show whichever colour had more matching pixels in the debug view.
         if (lastPurpleRatio > lastCyanRatio) purpleCombined.copyTo(combined)
@@ -236,7 +236,11 @@ class SpinnerDetector {
         private const val RING_INNER_RADIUS_FRAC = 0.3935
 
         // Minimum fraction of ring pixels that must match a colour to report that state.
-        private const val RING_DETECT_THRESHOLD = 0.70f
+        // Purple uses a lower threshold than cyan because the spin-reward items (XP, stardust,
+        // etc.) that pop up after a successful spin can cover the bottom half of the ring,
+        // leaving only the top arc visible in the center strip.
+        private const val CYAN_DETECT_THRESHOLD   = 0.70f
+        private const val PURPLE_DETECT_THRESHOLD = 0.42f
 
         // Width of the vertical center strip used to constrain purple detection,
         // as a fraction of frame width.  Only the ring pixels within this strip
