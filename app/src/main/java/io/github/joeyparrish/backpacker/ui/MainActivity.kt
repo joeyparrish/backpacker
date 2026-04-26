@@ -120,6 +120,8 @@ class MainActivity : AppCompatActivity() {
                 AutomationEngine.saveFailureScreenshots = false
                 binding.switchPassengerDebug.isChecked = false
                 AutomationEngine.debugPassenger = false
+                binding.switchExitButtonDebug.isChecked = false
+                AutomationEngine.debugExitButton = false
                 updatingDebugSwitches = false
             }
             OverlayView.skipCarMode = checked
@@ -136,6 +138,8 @@ class MainActivity : AppCompatActivity() {
                 AutomationEngine.saveFailureScreenshots = false
                 binding.switchPassengerDebug.isChecked = false
                 AutomationEngine.debugPassenger = false
+                binding.switchExitButtonDebug.isChecked = false
+                AutomationEngine.debugExitButton = false
                 updatingDebugSwitches = false
             }
             OverlayView.skipCarMode = checked
@@ -152,6 +156,8 @@ class MainActivity : AppCompatActivity() {
                 AutomationEngine.debugSpinner = false
                 binding.switchPassengerDebug.isChecked = false
                 AutomationEngine.debugPassenger = false
+                binding.switchExitButtonDebug.isChecked = false
+                AutomationEngine.debugExitButton = false
                 updatingDebugSwitches = false
             }
             OverlayView.skipCarMode = false
@@ -168,6 +174,26 @@ class MainActivity : AppCompatActivity() {
                 AutomationEngine.debugSpinner = false
                 binding.switchSaveFailures.isChecked = false
                 AutomationEngine.saveFailureScreenshots = false
+                binding.switchExitButtonDebug.isChecked = false
+                AutomationEngine.debugExitButton = false
+                updatingDebugSwitches = false
+            }
+            OverlayView.skipCarMode = checked
+        }
+
+        binding.switchExitButtonDebug.setOnCheckedChangeListener { _, checked ->
+            if (updatingDebugSwitches) return@setOnCheckedChangeListener
+            AutomationEngine.debugExitButton = checked
+            if (checked) {
+                updatingDebugSwitches = true
+                binding.switchDebugScan.isChecked = false
+                AutomationEngine.debugScan = false
+                binding.switchSpinnerDebug.isChecked = false
+                AutomationEngine.debugSpinner = false
+                binding.switchSaveFailures.isChecked = false
+                AutomationEngine.saveFailureScreenshots = false
+                binding.switchPassengerDebug.isChecked = false
+                AutomationEngine.debugPassenger = false
                 updatingDebugSwitches = false
             }
             OverlayView.skipCarMode = checked
@@ -231,11 +257,13 @@ class MainActivity : AppCompatActivity() {
         binding.switchSpinnerDebug.isChecked = false
         binding.switchSaveFailures.isChecked = false
         binding.switchPassengerDebug.isChecked = false
+        binding.switchExitButtonDebug.isChecked = false
         updatingDebugSwitches = false
         AutomationEngine.debugScan = false
         AutomationEngine.debugSpinner = false
         AutomationEngine.saveFailureScreenshots = false
         AutomationEngine.debugPassenger = false
+        AutomationEngine.debugExitButton = false
         OverlayView.skipCarMode = false
     }
 

@@ -132,19 +132,16 @@ class ExitButtonDetector {
         val viz = gray4.clone()
         gray4.release()
 
-        if (!combined.empty()) {
-            screenshot.copyTo(viz, combined)
-        }
-
+        // Show all pixels inside the circle in their original colour so the actual
+        // button colours are visible regardless of whether they matched a range.
         if (!buttonMask.empty()) {
+            screenshot.copyTo(viz, buttonMask)
+
             val cx = BUTTON_CENTER_NX * w
             val cy = BUTTON_CENTER_NY * h
             val r  = (BUTTON_RADIUS_NX * w).toInt()
-            val outlineColor = if (result != null)
-                Scalar(255.0, 255.0,   0.0, 255.0)   // yellow — found
-            else
-                Scalar(255.0,   0.0,   0.0, 255.0)   // red — not found
-            Imgproc.circle(viz, Point(cx.toDouble(), cy.toDouble()), r, outlineColor, 3)
+            Imgproc.circle(viz, Point(cx.toDouble(), cy.toDouble()), r,
+                Scalar(255.0, 0.0, 0.0, 255.0), 3)   // red outline always
         }
 
         val text = "white=%.1f%%  aqua=%.1f%%".format(lastWhiteRatio * 100f, lastAquaRatio * 100f)

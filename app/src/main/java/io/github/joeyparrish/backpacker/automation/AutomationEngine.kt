@@ -61,8 +61,12 @@ class AutomationEngine(
         if (debugSpinner) {
             runSpinnerDebugCheck()
             Log.d(TAG, "perf: debug total=${System.currentTimeMillis() - tRunStart}ms")
-            // Pause via the service so the FAB resets to IDLE and the notification updates.
-            // The Intent is processed after this coroutine returns, so there is no cancel race.
+            withContext(Dispatchers.Main) { AutomationService.pause(context) }
+            return
+        }
+
+        if (debugExitButton) {
+            runExitButtonDebugCheck()
             withContext(Dispatchers.Main) { AutomationService.pause(context) }
             return
         }
@@ -444,6 +448,34 @@ class AutomationEngine(
         Log.d(TAG, "perf: updateHud=${t5-t4}ms  showDebugImage=${t6-t5}ms")
     }
 
+    /**
+     * One-shot exit-button debug check. Captures a single screenshot, runs
+     * [ExitButtonDetector.detect], and shows the visualization overlay with all
+     * pixels inside the button circle in colour and the circle outlined in red.
+     * Caller sends AutomationService.pause() afterward to reset FAB and service state.
+     */
+    private suspend fun runExitButtonDebugCheck() {
+        Log.d(TAG, "Exit button debug: capturing screenshot")
+
+        val shot = screenshotService.capture()
+        if (shot == null) {
+            Log.w(TAG, "Exit button debug: screenshot failed")
+            updateHud("Screenshot failed")
+            return
+        }
+
+        val result = exitButtonDetector.detect(shot)
+        val bitmap = exitButtonDetector.visualize(shot, result)
+        shot.release()
+
+        val message = if (result != null) "Exit button found" else "No exit button"
+        Log.i(TAG, message)
+        updateHud(message)
+        withContext(Dispatchers.Main) {
+            tapperService.showDebugImage(bitmap)
+        }
+    }
+
     companion object {
         private const val TAG = "Backpacker.AutomationEngine"
 
@@ -458,6 +490,9 @@ class AutomationEngine(
 
         /** When true, each scan runs PassengerDetector and shows the debug overlay. */
         @Volatile var debugPassenger = false
+
+        /** When true, the next FAB activation takes one screenshot and shows the exit-button circle. */
+        @Volatile var debugExitButton = false
 
         // Poll interval when the screen is off — short enough to resume promptly,
         // long enough not to spin the CPU while the display is dark.
