@@ -45,8 +45,12 @@ class PokestopDetector {
     private val hsvLower = Scalar( 85.0, 150.0, 185.0)
     private val hsvUpper = Scalar(105.0, 225.0, 255.0)
 
-    // Min/max bounding-box height (720p px) for a valid disc contour.
-    private val minDiscHeight = 75
+    // Min/max bounding-box height (VD px, i.e. 720-wide-normalised) for a valid disc contour.
+    // minDiscHeight is intentionally low (≈54px at 2400 device height → 36 VD px) to catch stops
+    // that render in "collapsed" style even when just inside spin range.  The spin-radius check
+    // is the authoritative range gate; the height filter only rejects things too small/large to
+    // plausibly be a stop disc.
+    private val minDiscHeight = 36
     private val maxDiscHeight = 110
 
     private val morphKernelSize = Size(5.0, 5.0)
