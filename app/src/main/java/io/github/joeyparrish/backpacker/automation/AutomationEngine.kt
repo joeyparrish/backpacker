@@ -17,6 +17,7 @@ import io.github.joeyparrish.backpacker.service.AutomationService
 import io.github.joeyparrish.backpacker.service.ScreenshotService
 import io.github.joeyparrish.backpacker.service.TapperService
 import io.github.joeyparrish.backpacker.util.CoordinateTransform
+import io.github.joeyparrish.backpacker.vision.ExitButtonDetector
 import io.github.joeyparrish.backpacker.vision.PassengerDetector
 import io.github.joeyparrish.backpacker.vision.PokestopDetector
 import io.github.joeyparrish.backpacker.vision.SpinnerDetector
@@ -44,6 +45,7 @@ class AutomationEngine(
     @Volatile private var running = true
 
     private val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+    private val exitButtonDetector = ExitButtonDetector()
     private val passengerDetector = PassengerDetector()
     private val pokestopDetector = PokestopDetector()
     private val spinnerDetector = SpinnerDetector()
@@ -82,6 +84,7 @@ class AutomationEngine(
 
     /** Release pre-allocated OpenCV Mats held by the detectors. Call after [stop]. */
     fun release() {
+        exitButtonDetector.release()
         passengerDetector.release()
         pokestopDetector.release()
         spinnerDetector.release()
@@ -109,6 +112,22 @@ class AutomationEngine(
 
         val w = screenshotService.deviceWidth
         val h = screenshotService.deviceHeight
+
+        // Check for an exit button (gym, menu, egg viewer, Pokémon viewer, etc.) before
+        // anything else.  Tapping it is always the right recovery — and it overrides the
+        // passenger detector because the buddy screen shows a "play" button that the
+        // passenger detector would otherwise match first.
+        val exitButton = exitButtonDetector.detect(screenshot)
+        if (exitButton != null) {
+            screenshot.release()
+            val tapX = CoordinateTransform.toDeviceX(exitButton.x, w)
+            val tapY = CoordinateTransform.toDeviceY(exitButton.y, w)
+            Log.i(TAG, "Exit button detected — tapping at ($tapX, $tapY)")
+            tapperService.tap(tapX, tapY)
+            updateHud("Exiting to map")
+            delay(DISMISS_DELAY_MS)
+            return
+        }
 
         // Check for the speed-warning dialog before scanning for Pokéstops.
         // If the "I'm a Passenger" button (or any matching green pill) is visible, tap it

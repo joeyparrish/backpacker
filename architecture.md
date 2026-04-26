@@ -35,7 +35,8 @@ app/src/main/java/io/github/joeyparrish/backpacker/
 ├── vision/
 │   ├── PokestopDetector.kt    - HSV mask + contour analysis → disc centroids; visualize() for debug
 │   ├── SpinnerDetector.kt     - Fixed-geometry annular ring mask → spinner state; visualize() for debug
-│   └── PassengerDetector.kt   - White dialog → green pill inside it → tap target; visualize() for debug
+│   ├── PassengerDetector.kt   - White dialog → green pill inside it → tap target; visualize() for debug
+│   └── ExitButtonDetector.kt  - Fixed-position circular mask → white or aqua exit button → tap target; visualize() for debug
 ├── automation/
 │   └── AutomationEngine.kt    - Coroutine state machine; drives the full spin loop
 ├── ui/
@@ -116,8 +117,6 @@ alive so the user can resume without a new consent dialog.
 ```
 run()
 │
-├─ SETTLE_DELAY_MS - wait for FAB/overlay transition to finish
-│
 ├─ [spinner debug mode] → one-shot capture, report disc state, auto-pause
 │
 └─ SCAN LOOP (until stopped)
@@ -126,6 +125,10 @@ run()
     │
     ├─ capture() → Mat (720p RGBA)
     │   └─ If null → sleep CAPTURE_RETRY_MS, retry
+    │
+    ├─ ExitButtonDetector.detect(screenshot)
+    │   └─ If button found → tap, sleep DISMISS_DELAY_MS, repeat loop immediately
+    │      (checked before PassengerDetector — overrides buddy "play" button false positive)
     │
     ├─ PassengerDetector.detect(screenshot)
     │   ├─ [passenger debug mode] → one-shot visualize, auto-pause
