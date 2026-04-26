@@ -40,7 +40,7 @@ import org.opencv.imgproc.Imgproc
 class ExitButtonDetector {
 
     /** HSV range for the white button fill (white variant). */
-    private val whiteHsvLower = Scalar(  0.0,   0.0, 250.0)
+    private val whiteHsvLower = Scalar(  0.0,   0.0, 240.0)
     private val whiteHsvUpper = Scalar(180.0,   5.0, 255.0)
 
     /**
@@ -49,8 +49,8 @@ class ExitButtonDetector {
      * Measured: white-variant outline H=186/360, S=75/100, V=58/100;
      *           green-variant fill    H=188/360, S=80/100, V=59/100 — effectively identical.
      */
-    private val aquaHsvLower  = Scalar( 91.0, 186.0, 143.0)
-    private val aquaHsvUpper  = Scalar( 96.0, 209.0, 155.0)
+    private val aquaHsvLower  = Scalar( 92.0, 204.0, 149.0)
+    private val aquaHsvUpper  = Scalar( 96.0, 208.0, 153.0)
 
     // Pre-allocated scratch Mats.
     private val hsv           = Mat()
