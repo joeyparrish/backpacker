@@ -243,7 +243,8 @@ class ExitButtonDetector {
         private const val BUTTON_RADIUS_NX           = 0.048f  //   52 / 1080
 
         // Minimum fraction of circle pixels matching a colour to report a button present.
-        // White variant: ~60-70% white fill.  Green variant: ~60-70% aqua fill.
-        private const val DETECT_THRESHOLD = 0.40f
+        // White variant: >= 64% white fill in testing.  Green variant: >= 70% aqua fill in testing.
+        // False-positive danger zone: the Pokeball button is 59.5% matching white.
+        private const val DETECT_THRESHOLD = 0.63f
     }
 }
