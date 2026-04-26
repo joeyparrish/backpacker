@@ -22,18 +22,16 @@ import org.opencv.imgproc.Imgproc
  * Detects the top-left "run away" escape button shown during a Pokémon encounter.
  *
  * The button is a white running-figure icon at a fixed position.  Detection uses the
- * button's own alpha channel (loaded from res/raw/escape_icon.png) as the pixel mask,
- * so only the exact icon shape is tested rather than a bounding rectangle.  This avoids
- * false positives from unrelated bright elements elsewhere in the encounter screen.
+ * button's own alpha channel (loaded from res/raw/escape_icon.png) as the pixel mask.
  *
- * Detection strategy:
- *   1. On first use, load the icon PNG, threshold its alpha channel to a binary mask,
- *      and rescale it to the current frame dimensions.
- *   2. Convert RGBA → HSV.
- *   3. Check what fraction of the icon-mask pixels are white (low S, high V).
- *   4. If that fraction exceeds [DETECT_THRESHOLD], return the button centre.
+ * Two conditions must both be satisfied:
+ *   1. A high fraction of the icon-mask pixels are white (low S, high V) — the icon.
+ *   2. A low fraction of the bounding-box surround pixels (bounding box minus icon
+ *      shape) are white — the background.  This blocks the white-background false
+ *      positive: on the encounter screen the surround is blue-grey; on a plain white
+ *      surface it is also white and fails this check.
  *
- * The icon mask is rebuilt whenever the frame dimensions change.
+ * The icon and surround masks are rebuilt whenever the frame dimensions change.
  *
  * Pre-allocated Mats are reused across calls.  Call [release] when done.
  */
@@ -49,17 +47,20 @@ class EscapeButtonDetector(context: Context) {
     // The icon's alpha channel thresholded to binary, at the source PNG resolution.
     private val iconAlpha: Mat
 
-    // Icon mask placed on a full frame at the correct position — rebuilt on size change.
-    private var iconMask   = Mat()
-    private var iconPixels = 0f
+    // Icon mask and its inverse-within-bbox, placed on a full frame — rebuilt on size change.
+    private var iconMask    = Mat()
+    private var surroundMask = Mat()
+    private var iconPixels    = 0f
+    private var surroundPixels = 0f
 
     // Pre-allocated scratch Mats.
     private val hsv       = Mat()
     private val colorMask = Mat()
     private val masked    = Mat()
 
-    // Last-computed ratio from detect(); used by visualize().
-    private var lastRatio = 0f
+    // Last-computed ratios from detect(); used by visualize().
+    private var lastIconRatio    = 0f
+    private var lastSurroundRatio = 0f
 
     init {
         val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
@@ -91,6 +92,7 @@ class EscapeButtonDetector(context: Context) {
 
         if (iconMask.rows() != h || iconMask.cols() != w) {
             iconMask.release()
+            surroundMask.release()
             iconMask = Mat.zeros(h, w, CvType.CV_8UC1)
 
             val scaledW = (ICON_NW * w).toInt()
@@ -107,23 +109,47 @@ class EscapeButtonDetector(context: Context) {
             val dstH = minOf(scaledH, h - y)
             scaled.submat(0, dstH, 0, dstW).copyTo(iconMask.submat(y, y + dstH, x, x + dstW))
             scaled.release()
-
             iconPixels = Core.countNonZero(iconMask).toFloat()
-            Log.d(TAG, "Icon mask placed at (${x},${y}) ${scaledW}×${scaledH}: pixels=${iconPixels.toInt()}")
+
+            // Surround mask = bounding box rectangle minus the icon shape.
+            // Used to reject white-background false positives: on the encounter
+            // screen these pixels are blue-grey; on a plain white surface they
+            // are also white, making the surround ratio spike to ~100%.
+            val bboxMask = Mat.zeros(h, w, CvType.CV_8UC1)
+            Imgproc.rectangle(bboxMask,
+                Point(x.toDouble(), y.toDouble()),
+                Point((x + scaledW).toDouble(), (y + scaledH).toDouble()),
+                Scalar(255.0), -1)
+            val invertedIcon = Mat()
+            Core.bitwise_not(iconMask, invertedIcon)
+            surroundMask = Mat()
+            Core.bitwise_and(invertedIcon, bboxMask, surroundMask)
+            invertedIcon.release()
+            bboxMask.release()
+            surroundPixels = Core.countNonZero(surroundMask).toFloat()
+
+            Log.d(TAG, "Masks built at (${x},${y}) ${scaledW}×${scaledH}: " +
+                "icon=${iconPixels.toInt()} surround=${surroundPixels.toInt()}")
         }
 
         Imgproc.cvtColor(screenshot, hsv, Imgproc.COLOR_RGBA2RGB)
         Imgproc.cvtColor(hsv, hsv, Imgproc.COLOR_RGB2HSV)
 
         Core.inRange(hsv, whiteHsvLower, whiteHsvUpper, colorMask)
+
         Core.bitwise_and(colorMask, iconMask, masked)
-        lastRatio = Core.countNonZero(masked) / iconPixels
+        lastIconRatio = Core.countNonZero(masked) / iconPixels
 
-        Log.d(TAG, "Escape button ratio: $lastRatio")
+        Core.bitwise_and(colorMask, surroundMask, masked)
+        lastSurroundRatio = Core.countNonZero(masked) / surroundPixels
 
-        val found = lastRatio >= DETECT_THRESHOLD
+        Log.d(TAG, "Escape button: icon=%.1f%%  surround=%.1f%%"
+            .format(lastIconRatio * 100f, lastSurroundRatio * 100f))
+
+        val found = lastIconRatio >= ICON_THRESHOLD && lastSurroundRatio <= SURROUND_MAX
         if (found) {
-            Log.i(TAG, "Escape button detected (ratio=%.1f%%)".format(lastRatio * 100f))
+            Log.i(TAG, "Escape button detected (icon=%.1f%%  surround=%.1f%%)"
+                .format(lastIconRatio * 100f, lastSurroundRatio * 100f))
         }
         return if (found) PointF(ICON_CENTER_NX * w, ICON_CENTER_NY * h) else null
     }
@@ -132,9 +158,9 @@ class EscapeButtonDetector(context: Context) {
      * Produce a debug visualization of the last [detect] call.
      * Must be called before [screenshot] is released.
      *
-     * Pixels inside the icon mask are shown in their original colour; everything else
-     * is greyscaled.  A bounding rectangle is drawn in yellow (found) or red (not found).
-     * The white ratio is shown as a text overlay.
+     * Icon-mask pixels are shown in their original colour; surround-mask pixels are
+     * tinted blue; everything else is greyscaled.  The bounding rectangle is drawn in
+     * yellow (found) or red (not found).  Both ratios are shown as a text overlay.
      */
     fun visualize(screenshot: Mat, result: PointF?): Bitmap {
         val w = screenshot.cols()
@@ -150,12 +176,17 @@ class EscapeButtonDetector(context: Context) {
         gray4.release()
 
         if (!iconMask.empty()) {
+            // Icon pixels in original colour.
             screenshot.copyTo(viz, iconMask)
+            // Surround pixels tinted blue so the two regions are distinguishable.
+            val blue = Mat(h, w, viz.type(), Scalar(0.0, 0.0, 255.0, 255.0))
+            blue.copyTo(viz, surroundMask)
+            blue.release()
 
             val x = (ICON_LEFT_NX * w).toInt()
             val y = (ICON_TOP_NY  * h).toInt()
-            val r = (ICON_LEFT_NX * w + ICON_NW * w).toInt()
-            val b = (ICON_TOP_NY  * h + ICON_NH * h).toInt()
+            val r = ((ICON_LEFT_NX + ICON_NW) * w).toInt()
+            val b = ((ICON_TOP_NY  + ICON_NH) * h).toInt()
             val color = if (result != null)
                 Scalar(255.0, 255.0, 0.0, 255.0)   // yellow — found
             else
@@ -164,7 +195,8 @@ class EscapeButtonDetector(context: Context) {
                 Point(r.toDouble(), b.toDouble()), color, 3)
         }
 
-        val text = "escape=%.1f%%".format(lastRatio * 100f)
+        val text = "icon=%.1f%%  surround=%.1f%%"
+            .format(lastIconRatio * 100f, lastSurroundRatio * 100f)
         val fontFace  = Imgproc.FONT_HERSHEY_SIMPLEX
         val fontScale = 1.2
         val fontThick = 2
@@ -192,6 +224,7 @@ class EscapeButtonDetector(context: Context) {
     fun release() {
         iconAlpha.release()
         iconMask.release()
+        surroundMask.release()
         hsv.release()
         colorMask.release()
         masked.release()
@@ -209,8 +242,11 @@ class EscapeButtonDetector(context: Context) {
         private const val ICON_CENTER_NX = (65f + 46f) / 1080f  // 0.1028
         private const val ICON_CENTER_NY = (117f + 43f) / 2400f // 0.0667
 
-        // Minimum fraction of icon pixels that must be white to report the button present.
-        // Start conservative; calibrate from debug output.
-        private const val DETECT_THRESHOLD = 0.40f
+        // Minimum fraction of icon-mask pixels that must be white (the running figure).
+        private const val ICON_THRESHOLD  = 0.40f
+        // Maximum fraction of surround-mask pixels that may be white (the background).
+        // Plain white background gives ~100%; encounter screen gives ~0% (blue-grey).
+        // Calibrate from debug output; start permissive.
+        private const val SURROUND_MAX    = 0.30f
     }
 }
