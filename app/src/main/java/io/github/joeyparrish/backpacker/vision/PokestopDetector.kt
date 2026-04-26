@@ -207,8 +207,8 @@ class PokestopDetector {
         // Draw the spin-radius ellipse in green.
         Imgproc.ellipse(
             viz,
-            Point(SPIN_CENTER_NX * w, SPIN_CENTER_NY * h),
-            org.opencv.core.Size(SPIN_RADIUS_NX * w, SPIN_RADIUS_NY * h),
+            Point((SPIN_CENTER_NX * w).toDouble(), (SPIN_CENTER_NY * h).toDouble()),
+            org.opencv.core.Size((SPIN_RADIUS_NX * w).toDouble(), (SPIN_RADIUS_NY * h).toDouble()),
             0.0, 0.0, 360.0,
             Scalar(0.0, 255.0, 0.0, 255.0), thickness
         )
