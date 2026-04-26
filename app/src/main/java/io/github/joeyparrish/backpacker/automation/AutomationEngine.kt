@@ -17,6 +17,7 @@ import io.github.joeyparrish.backpacker.service.AutomationService
 import io.github.joeyparrish.backpacker.service.ScreenshotService
 import io.github.joeyparrish.backpacker.service.TapperService
 import io.github.joeyparrish.backpacker.util.CoordinateTransform
+import io.github.joeyparrish.backpacker.vision.EscapeButtonDetector
 import io.github.joeyparrish.backpacker.vision.ExitButtonDetector
 import io.github.joeyparrish.backpacker.vision.PassengerDetector
 import io.github.joeyparrish.backpacker.vision.PokestopDetector
@@ -46,6 +47,7 @@ class AutomationEngine(
 
     private val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
     private val exitButtonDetector = ExitButtonDetector()
+    private val escapeButtonDetector = EscapeButtonDetector(context)
     private val passengerDetector = PassengerDetector()
     private val pokestopDetector = PokestopDetector()
     private val spinnerDetector = SpinnerDetector()
@@ -71,6 +73,12 @@ class AutomationEngine(
             return
         }
 
+        if (debugEscapeButton) {
+            runEscapeButtonDebugCheck()
+            withContext(Dispatchers.Main) { AutomationService.pause(context) }
+            return
+        }
+
         while (running && coroutineContext.isActive) {
             try {
                 scanLoop()
@@ -89,6 +97,7 @@ class AutomationEngine(
     /** Release pre-allocated OpenCV Mats held by the detectors. Call after [stop]. */
     fun release() {
         exitButtonDetector.release()
+        escapeButtonDetector.release()
         passengerDetector.release()
         pokestopDetector.release()
         spinnerDetector.release()
@@ -129,6 +138,21 @@ class AutomationEngine(
             Log.i(TAG, "Exit button detected — tapping at ($tapX, $tapY)")
             tapperService.tap(tapX, tapY)
             updateHud("Exiting to map")
+            delay(DISMISS_DELAY_MS)
+            return
+        }
+
+        // Check for the Pokémon encounter escape button (top-left running figure).
+        // Encounters happen when a wild Pokémon is accidentally tapped; tapping the
+        // escape button returns to the map without catching.
+        val escapeButton = escapeButtonDetector.detect(screenshot)
+        if (escapeButton != null) {
+            screenshot.release()
+            val tapX = CoordinateTransform.toDeviceX(escapeButton.x, w)
+            val tapY = CoordinateTransform.toDeviceY(escapeButton.y, w)
+            Log.i(TAG, "Escape button detected — tapping at ($tapX, $tapY)")
+            tapperService.tap(tapX, tapY)
+            updateHud("Fleeing encounter")
             delay(DISMISS_DELAY_MS)
             return
         }
@@ -449,6 +473,34 @@ class AutomationEngine(
     }
 
     /**
+     * One-shot escape-button debug check. Captures a single screenshot, runs
+     * [EscapeButtonDetector.detect], and shows the visualization overlay with the
+     * icon-shaped region in colour and the bounding box outlined.
+     * Caller sends AutomationService.pause() afterward to reset FAB and service state.
+     */
+    private suspend fun runEscapeButtonDebugCheck() {
+        Log.d(TAG, "Escape button debug: capturing screenshot")
+
+        val shot = screenshotService.capture()
+        if (shot == null) {
+            Log.w(TAG, "Escape button debug: screenshot failed")
+            updateHud("Screenshot failed")
+            return
+        }
+
+        val result = escapeButtonDetector.detect(shot)
+        val bitmap = escapeButtonDetector.visualize(shot, result)
+        shot.release()
+
+        val message = if (result != null) "Escape button found" else "No escape button"
+        Log.i(TAG, message)
+        updateHud(message)
+        withContext(Dispatchers.Main) {
+            tapperService.showDebugImage(bitmap)
+        }
+    }
+
+    /**
      * One-shot exit-button debug check. Captures a single screenshot, runs
      * [ExitButtonDetector.detect], and shows the visualization overlay with all
      * pixels inside the button circle in colour and the circle outlined in red.
@@ -493,6 +545,9 @@ class AutomationEngine(
 
         /** When true, the next FAB activation takes one screenshot and shows the exit-button circle. */
         @Volatile var debugExitButton = false
+
+        /** When true, the next FAB activation takes one screenshot and shows the escape-button region. */
+        @Volatile var debugEscapeButton = false
 
         // Poll interval when the screen is off — short enough to resume promptly,
         // long enough not to spin the CPU while the display is dark.

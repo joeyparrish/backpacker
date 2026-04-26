@@ -182,7 +182,8 @@ class MainActivity : AppCompatActivity() {
             DebugMode(binding.switchSpinnerDebug,    { AutomationEngine.debugSpinner = it },           true),
             DebugMode(binding.switchSaveFailures,    { AutomationEngine.saveFailureScreenshots = it }, false),
             DebugMode(binding.switchPassengerDebug,  { AutomationEngine.debugPassenger = it },         true),
-            DebugMode(binding.switchExitButtonDebug, { AutomationEngine.debugExitButton = it },        true),
+            DebugMode(binding.switchExitButtonDebug,  { AutomationEngine.debugExitButton = it },        true),
+            DebugMode(binding.switchEscapeButtonDebug,{ AutomationEngine.debugEscapeButton = it },      true),
         )
 
         for (entry in debugModes) {
