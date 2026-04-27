@@ -555,7 +555,7 @@ class AutomationEngine(
         private const val ERROR_RECOVERY_DELAY_MS = 5_000L  // pause after unexpected scan error
         private const val OPEN_DELAY_MS           =   900L  // wait between tap & spin
         private const val SWIPE_DURATION_MS       =   300L  // swipe gesture length
-        private const val NUM_SPIN_ATTEMPTS       =     7L  // spin this many times
+        private const val NUM_SPIN_ATTEMPTS       =     7   // spin this many times
         private const val SCAN_IMMEDIATELY_MS     = 1_200L  // scan "right away", but with time for the "back to map" animation to settle
 
         private const val MAX_FAILURE_SCREENSHOTS = 30
