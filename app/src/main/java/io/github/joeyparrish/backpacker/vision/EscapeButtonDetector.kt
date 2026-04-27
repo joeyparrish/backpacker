@@ -42,8 +42,10 @@ import org.opencv.imgproc.Imgproc
  */
 class EscapeButtonDetector(context: Context) {
 
-    // Reference Canny edge image at source PNG resolution.
-    private val templateEdges: Mat
+    // Reference grayscale image at source PNG resolution — kept for rescaling.
+    // Canny is recomputed after scaling so edge detection runs at the correct
+    // output resolution rather than on a blurred-and-thresholded edge image.
+    private val templateGray: Mat
 
     // Scaled edge template for the current frame size — rebuilt on size change.
     private var scaledEdges = Mat()
@@ -65,16 +67,11 @@ class EscapeButtonDetector(context: Context) {
         Utils.bitmapToMat(bitmap, rgba)
         bitmap.recycle()
 
-        val gray = Mat()
-        Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
+        templateGray = Mat()
+        Imgproc.cvtColor(rgba, templateGray, Imgproc.COLOR_RGBA2GRAY)
         rgba.release()
 
-        templateEdges = Mat()
-        Imgproc.Canny(gray, templateEdges, CANNY_LOW.toDouble(), CANNY_HIGH.toDouble())
-        gray.release()
-
-        Log.d(TAG, "Template loaded: ${templateEdges.cols()}×${templateEdges.rows()} " +
-            "edge pixels=${Core.countNonZero(templateEdges)}")
+        Log.d(TAG, "Template loaded: ${templateGray.cols()}×${templateGray.rows()}")
     }
 
     /**
@@ -89,11 +86,16 @@ class EscapeButtonDetector(context: Context) {
         val tW = (ICON_NW * w).toInt()
         val tH = (ICON_NH * h).toInt()
         if (scaledW != tW || scaledH != tH) {
-            val resized = Mat()
-            Imgproc.resize(templateEdges, resized,
-                Size(tW.toDouble(), tH.toDouble()), 0.0, 0.0, Imgproc.INTER_LINEAR)
-            Imgproc.threshold(resized, scaledEdges, 128.0, 255.0, Imgproc.THRESH_BINARY)
-            resized.release()
+            // Scale the grayscale source first, then apply Canny at the target
+            // resolution.  Scaling an already-computed edge image blurs the
+            // single-pixel edges to sub-threshold values; recomputing at the
+            // correct size preserves them.
+            val grayResized = Mat()
+            Imgproc.resize(templateGray, grayResized,
+                Size(tW.toDouble(), tH.toDouble()), 0.0, 0.0, Imgproc.INTER_AREA)
+            Imgproc.Canny(grayResized, scaledEdges,
+                CANNY_LOW.toDouble(), CANNY_HIGH.toDouble())
+            grayResized.release()
             scaledW = tW
             scaledH = tH
             Log.d(TAG, "Scaled template: ${tW}×${tH}  edges=${Core.countNonZero(scaledEdges)}")
@@ -155,13 +157,19 @@ class EscapeButtonDetector(context: Context) {
             Imgproc.Canny(roi, roiEdges, CANNY_LOW.toDouble(), CANNY_HIGH.toDouble())
 
             val vizRoi = viz.submat(y, minOf(h, y + scaledH), x, minOf(w, x + scaledW))
+            val overlap = Mat()
+            Core.bitwise_and(roiEdges, scaledEdges, overlap)
             val cyan   = Mat(vizRoi.size(), vizRoi.type(), Scalar(  0.0, 255.0, 255.0, 255.0))
             val yellow = Mat(vizRoi.size(), vizRoi.type(), Scalar(255.0, 255.0,   0.0, 255.0))
-            // Cyan where screenshot edges fall; yellow where template edges fall (overwrites cyan).
+            val green  = Mat(vizRoi.size(), vizRoi.type(), Scalar(  0.0, 255.0,   0.0, 255.0))
+            // Cyan = screenshot edges only; yellow = template edges only; green = overlap.
             cyan.copyTo(vizRoi, roiEdges)
             yellow.copyTo(vizRoi, scaledEdges)
+            green.copyTo(vizRoi, overlap)
+            overlap.release()
             cyan.release()
             yellow.release()
+            green.release()
             vizRoi.release()
 
             val boxColor = if (result != null)
@@ -197,7 +205,7 @@ class EscapeButtonDetector(context: Context) {
 
     /** Release all pre-allocated Mats.  Call when the detector is no longer needed. */
     fun release() {
-        templateEdges.release()
+        templateGray.release()
         scaledEdges.release()
         grayFrame.release()
         roiEdges.release()
@@ -225,6 +233,8 @@ class EscapeButtonDetector(context: Context) {
 
         // Minimum TM_CCOEFF_NORMED score to report the button present.
         // Range is [-1, 1]; a uniform/white region scores near 0.  Calibrate from debug output.
-        private const val MATCH_THRESHOLD = 0.3f
+        // Observed: ~0.074 on plain-white false-negative, ~0.156 on true positive.  Set below
+        // true-positive score with margin; raise once more samples are collected.
+        private const val MATCH_THRESHOLD = 0.12f
     }
 }
