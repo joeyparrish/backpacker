@@ -129,8 +129,8 @@ class TapperService : AccessibilityService() {
     private fun handleToggle(newState: OverlayView.State) {
         when (newState) {
             OverlayView.State.IDLE  -> { AutomationService.pause(this); hudView?.clearStatus() }
-            OverlayView.State.HOUSE -> AutomationService.run(this, AutomationService.ScanMode.HOUSE)
-            OverlayView.State.CAR   -> AutomationService.run(this, AutomationService.ScanMode.CAR)
+            OverlayView.State.HOUSE -> { hudView?.show(); AutomationService.run(this, AutomationService.ScanMode.HOUSE) }
+            OverlayView.State.CAR   -> { hudView?.show(); AutomationService.run(this, AutomationService.ScanMode.CAR) }
         }
     }
 
