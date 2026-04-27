@@ -131,9 +131,10 @@ class EscapeButtonDetector(context: Context) {
      * Must be called before [screenshot] is released.
      *
      * The screenshot is greyscaled.  Within the icon bounding box the Canny edges
-     * detected in the screenshot are drawn in cyan and the scaled reference edges are
-     * drawn in yellow, so misalignment is immediately visible.  The bounding box is
-     * outlined in yellow (found) or red (not found).  The match score is shown as text.
+     * detected in the screenshot are drawn in blue, the scaled reference edges are
+     * drawn in yellow, and pixels where both agree are drawn in green, so alignment
+     * is immediately visible.  The bounding box is outlined in yellow (found) or
+     * red (not found).  The match score is shown as text.
      */
     fun visualize(screenshot: Mat, result: PointF?): Bitmap {
         val w = screenshot.cols()
@@ -159,15 +160,15 @@ class EscapeButtonDetector(context: Context) {
             val vizRoi = viz.submat(y, minOf(h, y + scaledH), x, minOf(w, x + scaledW))
             val overlap = Mat()
             Core.bitwise_and(roiEdges, scaledEdges, overlap)
-            val cyan   = Mat(vizRoi.size(), vizRoi.type(), Scalar(  0.0, 255.0, 255.0, 255.0))
+            val blue   = Mat(vizRoi.size(), vizRoi.type(), Scalar(  0.0,   0.0, 255.0, 255.0))
             val yellow = Mat(vizRoi.size(), vizRoi.type(), Scalar(255.0, 255.0,   0.0, 255.0))
             val green  = Mat(vizRoi.size(), vizRoi.type(), Scalar(  0.0, 255.0,   0.0, 255.0))
-            // Cyan = screenshot edges only; yellow = template edges only; green = overlap.
-            cyan.copyTo(vizRoi, roiEdges)
+            // Blue = screenshot edges only; yellow = template edges only; green = overlap.
+            blue.copyTo(vizRoi, roiEdges)
             yellow.copyTo(vizRoi, scaledEdges)
             green.copyTo(vizRoi, overlap)
             overlap.release()
-            cyan.release()
+            blue.release()
             yellow.release()
             green.release()
             vizRoi.release()
@@ -233,8 +234,8 @@ class EscapeButtonDetector(context: Context) {
 
         // Minimum TM_CCOEFF_NORMED score to report the button present.
         // Range is [-1, 1]; a uniform/white region scores near 0.  Calibrate from debug output.
-        // Observed: ~0.074 on plain-white false-negative, ~0.156 on true positive.  Set below
-        // true-positive score with margin; raise once more samples are collected.
-        private const val MATCH_THRESHOLD = 0.12f
+        // Observed: negatives 0.000/0.016/0.052/-0.016; positives 0.457/0.485/0.497/0.516.
+        // Large gap between ~0.052 and ~0.457 — threshold set in the middle.
+        private const val MATCH_THRESHOLD = 0.4f
     }
 }
