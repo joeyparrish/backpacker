@@ -69,12 +69,10 @@ class PokestopDetector {
 
     /**
      * @param passed         Contours that passed all filters, nearest-centre-first.
-     * @param allBounds      Bounding boxes of every non-trivial contour (area ≥ 50).
      * @param rejectedBounds Bounding boxes of contours that failed the height or area filter.
      */
     data class DetectionResult(
         val passed: List<Disc>,
-        val allBounds: List<RectF>,
         val rejectedBounds: List<RectF>
     )
 
@@ -109,68 +107,72 @@ class PokestopDetector {
         val screenCx = normWidth / 2f
         val screenCy = normHeight / 2f
         val detections = mutableListOf<Disc>()
-        val allBounds = mutableListOf<RectF>()
         val rejectedBounds = mutableListOf<RectF>()
 
-        for (contour in contours) {
-            val bb: Rect = Imgproc.boundingRect(contour)
-            val area = Imgproc.contourArea(contour)
+        try {
+            for (contour in contours) {
+                val bb: Rect = Imgproc.boundingRect(contour)
+                val area = Imgproc.contourArea(contour)
 
-            // Log all non-trivial contours so thresholds can be calibrated from logcat.
-            if (area >= 50) {
-                // Measure mean HSV within this contour so we can calibrate the hue filter.
-                // Reuse contourMask: clear to zeros, draw this contour, measure mean, repeat.
-                contourMask.setTo(Scalar(0.0))
-                Imgproc.drawContours(contourMask, listOf(contour), 0, Scalar(255.0), -1)
-                val meanHsv = Core.mean(hsv, contourMask)
-                val mH = meanHsv.`val`[0].toInt()
-                val mS = meanHsv.`val`[1].toInt()
-                val mV = meanHsv.`val`[2].toInt()
+                // Log all non-trivial contours so thresholds can be calibrated from logcat.
+                if (area >= 50) {
+                    // Measure mean HSV within this contour so we can calibrate the hue filter.
+                    // Reuse contourMask: clear to zeros, draw this contour, measure mean, repeat.
+                    contourMask.setTo(Scalar(0.0))
+                    Imgproc.drawContours(contourMask, listOf(contour), 0, Scalar(255.0), -1)
+                    val meanHsv = Core.mean(hsv, contourMask)
+                    val mH = meanHsv.`val`[0].toInt()
+                    val mS = meanHsv.`val`[1].toInt()
+                    val mV = meanHsv.`val`[2].toInt()
 
-                val discCenterNx = (bb.x + bb.width  / 2f) / normWidth
-                val discCenterNy = (bb.y + bb.height / 2f) / normHeight
-                // Spin-radius check: X is normalised by width, Y by height.  The circle in
-                // pixel space becomes an ellipse in this non-square normalised space, so we
-                // use the ellipse membership formula: (dx/rx)² + (dy/ry)² ≤ 1.
-                val sdx = (discCenterNx - SPIN_CENTER_NX) / SPIN_RADIUS_NX
-                val sdy = (discCenterNy - SPIN_CENTER_NY) / SPIN_RADIUS_NY
-                val inSpinRadius = sdx * sdx + sdy * sdy <= 1.0f
-                val exclusionZone = EXCLUSION_ZONES.firstOrNull { it.contains(discCenterNx, discCenterNy) }
-                val verdict = when {
-                    bb.height !in minDiscHeight..maxDiscHeight ->
-                        "SKIP (h=${bb.height} not in $minDiscHeight..$maxDiscHeight)"
-                    !inSpinRadius ->
-                        "SKIP (centre %.2f,%.2f outside spin radius)".format(discCenterNx, discCenterNy)
-                    exclusionZone != null ->
-                        "SKIP (centre %.2f,%.2f in exclusion zone ${exclusionZone.label})".format(discCenterNx, discCenterNy)
-                    else -> "PASS"
-                }
-                Log.d(TAG, "Contour @ (${bb.x},${bb.y}): " +
-                        "h=${bb.height} w=${bb.width} area=${area.toInt()} " +
-                        "meanHSV=($mH,$mS,$mV) " +
-                        "→ $verdict")
+                    val discCenterNx = (bb.x + bb.width  / 2f) / normWidth
+                    val discCenterNy = (bb.y + bb.height / 2f) / normHeight
+                    // Spin-radius check: X is normalised by width, Y by height.  The circle in
+                    // pixel space becomes an ellipse in this non-square normalised space, so we
+                    // use the ellipse membership formula: (dx/rx)² + (dy/ry)² ≤ 1.
+                    val sdx = (discCenterNx - SPIN_CENTER_NX) / SPIN_RADIUS_NX
+                    val sdy = (discCenterNy - SPIN_CENTER_NY) / SPIN_RADIUS_NY
+                    val inSpinRadius = sdx * sdx + sdy * sdy <= 1.0f
+                    val exclusionZone = EXCLUSION_ZONES.firstOrNull { it.contains(discCenterNx, discCenterNy) }
+                    val verdict = when {
+                        bb.height !in minDiscHeight..maxDiscHeight ->
+                            "SKIP (h=${bb.height} not in $minDiscHeight..$maxDiscHeight)"
+                        !inSpinRadius ->
+                            "SKIP (centre %.2f,%.2f outside spin radius)".format(discCenterNx, discCenterNy)
+                        exclusionZone != null ->
+                            "SKIP (centre %.2f,%.2f in exclusion zone ${exclusionZone.label})".format(discCenterNx, discCenterNy)
+                        else -> "PASS"
+                    }
+                    Log.d(TAG, "Contour @ (${bb.x},${bb.y}): " +
+                            "h=${bb.height} w=${bb.width} area=${area.toInt()} " +
+                            "meanHSV=($mH,$mS,$mV) " +
+                            "→ $verdict")
 
-                val bounds = RectF(
-                    bb.x.toFloat(), bb.y.toFloat(),
-                    (bb.x + bb.width).toFloat(), (bb.y + bb.height).toFloat()
-                )
-                allBounds.add(bounds)
+                    val bounds = RectF(
+                        bb.x.toFloat(), bb.y.toFloat(),
+                        (bb.x + bb.width).toFloat(), (bb.y + bb.height).toFloat()
+                    )
 
-                val passes = bb.height in minDiscHeight..maxDiscHeight
-                        && inSpinRadius
-                        && exclusionZone == null
-                if (!passes) {
-                    rejectedBounds.add(bounds)
-                } else {
-                    val M = Imgproc.moments(contour)
-                    if (M.m00 > 0) {
-                        val cx = (M.m10 / M.m00).toFloat()
-                        val cy = (M.m01 / M.m00).toFloat()
-                        detections.add(Disc(PointF(cx, cy), bounds))
+                    val passes = bb.height in minDiscHeight..maxDiscHeight
+                            && inSpinRadius
+                            && exclusionZone == null
+                    if (!passes) {
+                        rejectedBounds.add(bounds)
+                    } else {
+                        val M = Imgproc.moments(contour)
+                        if (M.m00 > 0) {
+                            val cx = (M.m10 / M.m00).toFloat()
+                            val cy = (M.m01 / M.m00).toFloat()
+                            detections.add(Disc(PointF(cx, cy), bounds))
+                        }
                     }
                 }
             }
-            contour.release()
+        } finally {
+            // Release all MatOfPoint native memory.  findContours() allocates these; we must
+            // free them explicitly.  The finally block ensures release even if an exception
+            // interrupts the loop mid-way.
+            contours.forEach { it.release() }
         }
 
         detections.sortBy { d ->
@@ -180,7 +182,7 @@ class PokestopDetector {
         }
 
         Log.d(TAG, "Detected ${detections.size} Pokéstop disc(s) (of ${contours.size} total contours)")
-        return DetectionResult(detections, allBounds, rejectedBounds)
+        return DetectionResult(detections, rejectedBounds)
     }
 
     /**
