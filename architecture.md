@@ -33,15 +33,17 @@ app/src/main/java/io/github/joeyparrish/backpacker/
 │   ├── TapperService.kt       - AccessibilityService; gesture dispatch + overlay windows
 │   └── ScreenshotService.kt   - MediaProjection wrapper; captures frames as OpenCV Mats
 ├── vision/
-│   ├── PokestopDetector.kt    - HSV mask + contour analysis → disc centroids; visualize() for debug
-│   ├── SpinnerDetector.kt     - Fixed-geometry annular ring mask → spinner state; visualize() for debug
-│   ├── PassengerDetector.kt   - White dialog → green pill inside it → tap target; visualize() for debug
-│   └── ExitButtonDetector.kt  - Fixed-position circular mask → white or aqua exit button → tap target; visualize() for debug
+│   ├── PokestopDetector.kt     - HSV mask + contour analysis → disc centroids; visualize() for debug
+│   ├── SpinnerDetector.kt      - Fixed-geometry annular ring mask → spinner state; visualize() for debug
+│   ├── PassengerDetector.kt    - White dialog → green pill inside it → tap target; visualize() for debug
+│   ├── ExitButtonDetector.kt   - Two circular masks (standard + menu Y positions) → white or aqua exit button → tap target; visualize() for debug
+│   └── EscapeButtonDetector.kt - Canny edge template matching against reference icon → encounter escape button → tap target; visualize() for debug
 ├── automation/
 │   └── AutomationEngine.kt    - Coroutine state machine; drives the full spin loop
 ├── ui/
 │   ├── MainActivity.kt        - Collapsible Setup / Automation / Debug sections; app header; version display; overlay + debug switches
 │   ├── OverlayView.kt         - Floating FAB: IDLE / HOUSE / CAR states
+│   ├── HudView.kt             - Persistent two-line status overlay (bottom-left)
 │   └── VisionDebugView.kt     - Full-screen tap-to-dismiss Bitmap overlay for vision debug
 └── util/
     └── CoordinateTransform.kt - 720p ↔ device-pixel coordinate scaling
@@ -117,7 +119,9 @@ alive so the user can resume without a new consent dialog.
 ```
 run()
 │
-├─ [spinner debug mode] → one-shot capture, report disc state, auto-pause
+├─ [spinner debug mode]        → one-shot capture, report disc state, auto-pause
+├─ [exit button debug mode]    → one-shot capture, show button circle overlay, auto-pause
+├─ [escape button debug mode]  → one-shot capture, show Canny edge overlay, auto-pause
 │
 └─ SCAN LOOP (until stopped)
     │
@@ -128,7 +132,11 @@ run()
     │
     ├─ ExitButtonDetector.detect(screenshot)
     │   └─ If button found → tap, sleep DISMISS_DELAY_MS, repeat loop immediately
-    │      (checked before PassengerDetector — overrides buddy "play" button false positive)
+    │      (checked first — overrides PassengerDetector on buddy screen)
+    │
+    ├─ EscapeButtonDetector.detect(screenshot)
+    │   └─ If button found → tap, sleep DISMISS_DELAY_MS, repeat loop immediately
+    │      (handles accidental Pokémon encounter taps)
     │
     ├─ PassengerDetector.detect(screenshot)
     │   ├─ [passenger debug mode] → one-shot visualize, auto-pause
@@ -143,7 +151,8 @@ run()
     │   ├─ sleep OPEN_DELAY_MS - detail view animation
     │   │
     │   ├─ checkDiscState() - initial check
-    │   │   ├─ null / ABSENT → bailed out or wrong tap target → return false
+    │   │   ├─ null / ABSENT → wrong tap target → return false
+    │   │   │   (next iteration's exit/escape checks handle recovery)
     │   │   ├─ PURPLE → already spun → back(), return false
     │   │   └─ CYAN → proceed
     │   │
@@ -185,10 +194,14 @@ height are unreliable.
 3. Morphological close (5×5 kernel) to fill small gaps in the mask
 4. `Imgproc.findContours`
 5. Filter contours:
-   - Bounding-box **height** 75–110 px at 720p
-   - Bounding-box centre Y must be in the top 85% of the frame (bottom 15%
-     excluded — tapping there risks hitting game UI elements like the pokeball bar)
-6. Compute centroid via image moments (not bounding-box centre - the disc image
+   - Bounding-box **height** 36–110 px at 720p (intentionally low — a stop near
+     the spin-radius boundary appears small; height is still stable)
+   - Bounding-box centre must fall within a spin-radius ellipse centred on the
+     screen (NX=0.516, NY=0.233 semi-axes) — stops outside tapping range are
+     skipped
+   - Bounding-box centre must not fall within any of five named exclusion zones
+     (game UI elements: pokeball bar, experience bar, etc.)
+6. Compute centroid via image moments (not bounding-box centre — the disc image
    sits above the pole, so the bounding-box midpoint lands on the pole rather
    than the tappable disc).
 
@@ -217,9 +230,14 @@ After opening a stop, the large spinner ring is either:
 
 **Calibrated values:**
 - Outer radius: 43.85% of width; inner: 39.35%
-- Purple HSV: H=120–155, S=75–160, V=165–255
+- Purple HSV: H=114–155, S=75–205, V=145–255 (expanded for overcast/low-light)
 - Cyan HSV: H=90–115, S=175–240, V=155–255
-- Detection threshold: 70% of ring pixels must match
+- Purple threshold: 42% of strip-ring pixels (lower because spin-reward items
+  can cover the bottom half of the ring)
+- Cyan threshold: 70% of ring pixels
+
+Purple is checked against a narrower centre-strip mask (8% of frame width) to
+reduce interference from adjacent UI colour; cyan uses the full ring mask.
 
 **Why a fixed mask instead of HoughCircles:** HoughCircles sometimes found
 circles on the map when the detail view was not open, causing false spins.
@@ -266,15 +284,60 @@ text. The pale left side has low saturation (~S=60), hence the loose S
 lower bound. Other PoGO dialogs with the same gradient button style are
 matched intentionally.
 
+### Exit Button Detection (ExitButtonDetector)
+
+Detects the bottom-centre circular X button that dismisses gyms, menus, the egg
+viewer, the Pokémon viewer, and similar full-screen overlays.
+
+**Two colour variants:**
+- White — white fill with aqua outline/icon (gym, raid, battle screens)
+- Green — aqua fill with yellow-green icon (menus, egg viewer, Pokémon viewer)
+
+**Two candidate positions** (Y varies by screen type):
+- Standard: NY=0.941 (2259/2400) — gym, spinner detail, most views
+- Menu: NY=0.929 (2230/2400) — main menu, bag, egg viewer, Pokémon viewer
+
+**Algorithm:** For each candidate, build a circular mask (radius NX=0.048),
+measure the fraction of masked pixels matching the white HSV range (S≤30, V≥235)
+and the aqua range. The candidate with the highest max(white, aqua) ratio that
+also exceeds DETECT_THRESHOLD (0.63) is selected and its centre returned.
+Using the best-signal candidate rather than the first over threshold prevents
+the two overlapping circles from mis-selecting when the button sits at the higher
+position (the lower circle still gets partial signal from overlap).
+
+### Pokémon Encounter Escape Button (EscapeButtonDetector)
+
+Detects the top-left running-figure icon shown when a wild Pokémon encounter is
+open. Tapping it flees the encounter and returns to the map.
+
+**Why not colour thresholding:** The icon is white, so any white content in that
+screen region (UI, backgrounds) produces a high white-pixel ratio with no icon
+present. Counting pixels is not shape-sensitive enough.
+
+**Algorithm — Canny edge template matching:**
+1. At construction, load the reference crop (`res/raw/escape_icon.png` — the
+   unmodified screenshot region including the drop shadow and background),
+   convert to greyscale, and compute Canny edges. The strong edge at the
+   white-icon / dark-shadow boundary is the distinctive signal.
+2. Rescale the edge template once per frame-size change.
+3. In detect(), extract a slightly padded greyscale ROI from the screenshot at
+   the known button position (NX=0.060–0.145, NY=0.049–0.085), compute its
+   Canny edges, and run `matchTemplate(TM_CCOEFF_NORMED)`.
+4. Return the button centre if the best match score ≥ MATCH_THRESHOLD (0.3,
+   to be calibrated).
+
+On a uniform white background there are no edges in the ROI, so the score is
+near zero. On the encounter screen the icon outline produces a strong match.
+
 ---
 
 ## Why These Design Decisions
 
-**Success = `finalState != CYAN` (not `== PURPLE`):** The spin animation
-transitions cyan → animation frames (may appear ABSENT briefly) → purple. If we
-check immediately after the swipe, the animation may not have finished. Anything
-that is no longer cyan means the spin was triggered successfully, even if the
-purple state has not yet fully rendered.
+**Success = `finalState == PURPLE`:** The engine checks state after *each* swipe
+and breaks out of the swipe loop the moment PURPLE is seen. Because the check
+runs frequently, it catches the PURPLE state before the animation frames obscure
+it. Checking between swipes also stops unnecessary extra swipes once the server
+has accepted the spin.
 
 **Spin by many rapid swipes, check state once after:** Multiple swipes cost
 negligible extra time, but substantially improve reliability. GPS jitter while
@@ -350,10 +413,11 @@ It would back out to the map, swipe the map, then try to back out of the game
 entirely. Replaced with the current single-check-before / single-check-after
 structure.
 
-**`isSpinSuccess() == PURPLE`:** Checking for the purple state explicitly caused
-legitimate successes to be reported as failures because the spin animation
-transitions through an intermediate state that the detector reports as ABSENT.
-Replaced with `finalState != CYAN`.
+**`finalState != CYAN` as the success condition:** Used briefly to avoid the
+spin-animation intermediate ABSENT state when checking once after all swipes.
+Replaced with `finalState == PURPLE` once the engine was changed to check state
+after *each* swipe — catching PURPLE before the animation can obscure it, and
+stopping extra swipes as soon as the server accepts the spin.
 
 **`OverlayView` inflated without a theme context:** `LayoutInflater` from a
 Service does not carry the app's Material theme. `FloatingActionButton` throws

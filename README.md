@@ -80,20 +80,27 @@ All debug modes are mutually exclusive. Enabling one clears the others.
 Debug flags are cleared when the overlay is turned off.
 
 - **Debug scan** — captures one screenshot, highlights detected Pokéstop disc
-  positions with bounding boxes, shows the result as a full-screen overlay.
-  Useful for tuning detection thresholds.
+  positions with bounding boxes and the spin-radius ellipse, shows the result
+  as a full-screen overlay. Useful for tuning detection thresholds.
 - **Debug spinner** — captures one screenshot and reports whether the spinner
   ring is cyan (ready), purple (already spun), or absent (wrong screen).
-- **Debug passenger** — captures one screenshot and reports whether the
-  speed-warning dialog's green pill button is detected. Useful for checking
-  false-positive rates across different game screens.
 - **Save screenshots for failures** — saves a PNG to `Pictures/Backpacker`
   whenever the engine taps a disc but finds nothing recognisable on screen
   (wrong tap target). Keeps the last 30 files.
+- **Debug passenger** — captures one screenshot and reports whether the
+  speed-warning dialog's green pill button is detected. Useful for checking
+  false-positive rates across different game screens.
+- **Debug exit button** — captures one screenshot and shows the two candidate
+  circular regions (standard and menu Y positions) used to detect the bottom
+  X button, with colour ratios overlaid.
+- **Debug escape button** — captures one screenshot and overlays the Canny
+  edges from the screenshot (cyan) and the reference template (yellow) at the
+  known escape-button position, with a match score. Cyan/yellow overlap
+  confirms shape alignment.
 
-The first three modes disable "moving" mode (the button only offers "idle"
-and "stationary") and are one-shot: one tap captures one screenshot, then
-the overlay resets to idle.
+All modes except **Save screenshots for failures** disable "moving" mode (the
+button only offers "idle" and "stationary") and are one-shot: one tap captures
+one screenshot, then the overlay resets to idle.
 
 ### Debug logging
 
