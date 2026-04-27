@@ -66,7 +66,7 @@ Open Pokémon GO and use the floating button to control automation:
 |---|---|
 | Cyan pokestop icon (dim) | **Idle** — not running |
 | Red house icon | **Stationary mode** — scans once per minute |
-| Red car icon | **Moving mode** — scans once per 2 seconds |
+| Red car icon | **Moving mode** — scans once per second |
 
 Tap the button to cycle through states. Drag it to reposition.
 
