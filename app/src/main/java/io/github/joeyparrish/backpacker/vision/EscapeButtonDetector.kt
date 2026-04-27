@@ -11,7 +11,6 @@ import android.util.Log
 import io.github.joeyparrish.backpacker.R
 import org.opencv.android.Utils
 import org.opencv.core.Core
-import org.opencv.core.CvType
 import org.opencv.core.Mat
 import org.opencv.core.Point
 import org.opencv.core.Scalar
@@ -21,46 +20,43 @@ import org.opencv.imgproc.Imgproc
 /**
  * Detects the top-left "run away" escape button shown during a Pokémon encounter.
  *
- * The button is a white running-figure icon at a fixed position.  Detection uses the
- * button's own alpha channel (loaded from res/raw/escape_icon.png) as the pixel mask.
+ * The button is a white running-figure icon against a dark drop shadow and a blue-grey
+ * background.  Simple white-pixel counting does not work: any white region at the button
+ * position (e.g. a plain white test background) gives a high ratio even with no icon.
  *
- * Two conditions must both be satisfied:
- *   1. A high fraction of the icon-mask pixels are white (low S, high V) — the icon.
- *   2. A low fraction of the bounding-box surround pixels (bounding box minus icon
- *      shape) are white — the background.  This blocks the white-background false
- *      positive: on the encounter screen the surround is blue-grey; on a plain white
- *      surface it is also white and fails this check.
+ * Instead, detection is edge-based:
+ *   1. At initialisation, load the reference image (res/raw/escape_icon.png — the
+ *      original, unmodified crop that includes the shadow and background), convert to
+ *      greyscale, and compute Canny edges.  This captures the distinctive outline of
+ *      the running figure where white meets dark.
+ *   2. Rescale the edge template once per frame-size change.
+ *   3. In detect(), extract a slightly padded greyscale ROI from the screenshot at
+ *      the known button position, compute its Canny edges, and run
+ *      matchTemplate(TM_CCOEFF_NORMED) to score the shape match.
+ *   4. Return the button centre if the best match score exceeds [MATCH_THRESHOLD].
  *
- * The icon and surround masks are rebuilt whenever the frame dimensions change.
+ * On a plain white background the ROI has no edges, giving a near-zero score.
+ * On the encounter screen the icon outline produces a strong match.
  *
  * Pre-allocated Mats are reused across calls.  Call [release] when done.
  */
 class EscapeButtonDetector(context: Context) {
 
-    /**
-     * HSV range for the white icon.  Same range as the white exit button — the icon
-     * can render slightly off-white against the encounter overlay.
-     */
-    private val whiteHsvLower = Scalar(  0.0,   0.0, 200.0)
-    private val whiteHsvUpper = Scalar(180.0,  40.0, 255.0)
+    // Reference Canny edge image at source PNG resolution.
+    private val templateEdges: Mat
 
-    // The icon's alpha channel thresholded to binary, at the source PNG resolution.
-    private val iconAlpha: Mat
-
-    // Icon mask and its inverse-within-bbox, placed on a full frame — rebuilt on size change.
-    private var iconMask    = Mat()
-    private var surroundMask = Mat()
-    private var iconPixels    = 0f
-    private var surroundPixels = 0f
+    // Scaled edge template for the current frame size — rebuilt on size change.
+    private var scaledEdges = Mat()
+    private var scaledW     = 0
+    private var scaledH     = 0
 
     // Pre-allocated scratch Mats.
-    private val hsv       = Mat()
-    private val colorMask = Mat()
-    private val masked    = Mat()
+    private val grayFrame = Mat()
+    private val roiEdges  = Mat()
+    private val matchResult = Mat()
 
-    // Last-computed ratios from detect(); used by visualize().
-    private var lastIconRatio    = 0f
-    private var lastSurroundRatio = 0f
+    // Last score from detect(); used by visualize().
+    private var lastScore = 0f
 
     init {
         val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
@@ -69,16 +65,16 @@ class EscapeButtonDetector(context: Context) {
         Utils.bitmapToMat(bitmap, rgba)
         bitmap.recycle()
 
-        // Extract the alpha channel as the icon shape mask.
-        val channels = mutableListOf<Mat>()
-        Core.split(rgba, channels)
-        iconAlpha = channels[3]
-        Imgproc.threshold(iconAlpha, iconAlpha, 128.0, 255.0, Imgproc.THRESH_BINARY)
-        channels.forEachIndexed { i, m -> if (i != 3) m.release() }
+        val gray = Mat()
+        Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
         rgba.release()
 
-        Log.d(TAG, "Icon loaded: ${iconAlpha.cols()}×${iconAlpha.rows()} " +
-            "icon pixels=${Core.countNonZero(iconAlpha)}")
+        templateEdges = Mat()
+        Imgproc.Canny(gray, templateEdges, CANNY_LOW.toDouble(), CANNY_HIGH.toDouble())
+        gray.release()
+
+        Log.d(TAG, "Template loaded: ${templateEdges.cols()}×${templateEdges.rows()} " +
+            "edge pixels=${Core.countNonZero(templateEdges)}")
     }
 
     /**
@@ -90,66 +86,40 @@ class EscapeButtonDetector(context: Context) {
         val w = screenshot.cols()
         val h = screenshot.rows()
 
-        if (iconMask.rows() != h || iconMask.cols() != w) {
-            iconMask.release()
-            surroundMask.release()
-            iconMask = Mat.zeros(h, w, CvType.CV_8UC1)
-
-            val scaledW = (ICON_NW * w).toInt()
-            val scaledH = (ICON_NH * h).toInt()
-            val scaled  = Mat()
-            Imgproc.resize(iconAlpha, scaled, Size(scaledW.toDouble(), scaledH.toDouble()),
-                0.0, 0.0, Imgproc.INTER_AREA)
-            // Re-threshold after resize to keep the mask binary.
-            Imgproc.threshold(scaled, scaled, 128.0, 255.0, Imgproc.THRESH_BINARY)
-
-            val x = (ICON_LEFT_NX * w).toInt()
-            val y = (ICON_TOP_NY  * h).toInt()
-            val dstW = minOf(scaledW, w - x)
-            val dstH = minOf(scaledH, h - y)
-            scaled.submat(0, dstH, 0, dstW).copyTo(iconMask.submat(y, y + dstH, x, x + dstW))
-            scaled.release()
-            iconPixels = Core.countNonZero(iconMask).toFloat()
-
-            // Surround mask = bounding box rectangle minus the icon shape.
-            // Used to reject white-background false positives: on the encounter
-            // screen these pixels are blue-grey; on a plain white surface they
-            // are also white, making the surround ratio spike to ~100%.
-            val bboxMask = Mat.zeros(h, w, CvType.CV_8UC1)
-            Imgproc.rectangle(bboxMask,
-                Point(x.toDouble(), y.toDouble()),
-                Point((x + scaledW).toDouble(), (y + scaledH).toDouble()),
-                Scalar(255.0), -1)
-            val invertedIcon = Mat()
-            Core.bitwise_not(iconMask, invertedIcon)
-            surroundMask = Mat()
-            Core.bitwise_and(invertedIcon, bboxMask, surroundMask)
-            invertedIcon.release()
-            bboxMask.release()
-            surroundPixels = Core.countNonZero(surroundMask).toFloat()
-
-            Log.d(TAG, "Masks built at (${x},${y}) ${scaledW}×${scaledH}: " +
-                "icon=${iconPixels.toInt()} surround=${surroundPixels.toInt()}")
+        val tW = (ICON_NW * w).toInt()
+        val tH = (ICON_NH * h).toInt()
+        if (scaledW != tW || scaledH != tH) {
+            val resized = Mat()
+            Imgproc.resize(templateEdges, resized,
+                Size(tW.toDouble(), tH.toDouble()), 0.0, 0.0, Imgproc.INTER_LINEAR)
+            Imgproc.threshold(resized, scaledEdges, 128.0, 255.0, Imgproc.THRESH_BINARY)
+            resized.release()
+            scaledW = tW
+            scaledH = tH
+            Log.d(TAG, "Scaled template: ${tW}×${tH}  edges=${Core.countNonZero(scaledEdges)}")
         }
 
-        Imgproc.cvtColor(screenshot, hsv, Imgproc.COLOR_RGBA2RGB)
-        Imgproc.cvtColor(hsv, hsv, Imgproc.COLOR_RGB2HSV)
+        // Extract a padded ROI so matchTemplate has a small search window and the
+        // result is not degenerate (source must be >= template size).
+        val x0 = maxOf(0, (ICON_LEFT_NX * w).toInt() - SEARCH_PAD)
+        val y0 = maxOf(0, (ICON_TOP_NY  * h).toInt() - SEARCH_PAD)
+        val x1 = minOf(w, x0 + tW + SEARCH_PAD * 2)
+        val y1 = minOf(h, y0 + tH + SEARCH_PAD * 2)
 
-        Core.inRange(hsv, whiteHsvLower, whiteHsvUpper, colorMask)
+        Imgproc.cvtColor(screenshot, grayFrame, Imgproc.COLOR_RGBA2GRAY)
+        val roi = grayFrame.submat(y0, y1, x0, x1)
+        Imgproc.Canny(roi, roiEdges, CANNY_LOW.toDouble(), CANNY_HIGH.toDouble())
 
-        Core.bitwise_and(colorMask, iconMask, masked)
-        lastIconRatio = Core.countNonZero(masked) / iconPixels
+        Imgproc.matchTemplate(roiEdges, scaledEdges, matchResult, Imgproc.TM_CCOEFF_NORMED)
 
-        Core.bitwise_and(colorMask, surroundMask, masked)
-        lastSurroundRatio = Core.countNonZero(masked) / surroundPixels
+        val mm = Core.minMaxLoc(matchResult)
+        lastScore = mm.maxVal.toFloat()
 
-        Log.d(TAG, "Escape button: icon=%.1f%%  surround=%.1f%%"
-            .format(lastIconRatio * 100f, lastSurroundRatio * 100f))
+        Log.d(TAG, "Escape button score: $lastScore")
 
-        val found = lastIconRatio >= ICON_THRESHOLD && lastSurroundRatio <= SURROUND_MAX
+        val found = lastScore >= MATCH_THRESHOLD
         if (found) {
-            Log.i(TAG, "Escape button detected (icon=%.1f%%  surround=%.1f%%)"
-                .format(lastIconRatio * 100f, lastSurroundRatio * 100f))
+            Log.i(TAG, "Escape button detected (score=%.3f)".format(lastScore))
         }
         return if (found) PointF(ICON_CENTER_NX * w, ICON_CENTER_NY * h) else null
     }
@@ -158,9 +128,10 @@ class EscapeButtonDetector(context: Context) {
      * Produce a debug visualization of the last [detect] call.
      * Must be called before [screenshot] is released.
      *
-     * Icon-mask pixels are shown in their original colour; surround-mask pixels are
-     * tinted blue; everything else is greyscaled.  The bounding rectangle is drawn in
-     * yellow (found) or red (not found).  Both ratios are shown as a text overlay.
+     * The screenshot is greyscaled.  Within the icon bounding box the Canny edges
+     * detected in the screenshot are drawn in cyan and the scaled reference edges are
+     * drawn in yellow, so misalignment is immediately visible.  The bounding box is
+     * outlined in yellow (found) or red (not found).  The match score is shown as text.
      */
     fun visualize(screenshot: Mat, result: PointF?): Bitmap {
         val w = screenshot.cols()
@@ -171,47 +142,51 @@ class EscapeButtonDetector(context: Context) {
         Imgproc.cvtColor(screenshot, gray1, Imgproc.COLOR_RGBA2GRAY)
         Imgproc.cvtColor(gray1, gray4, Imgproc.COLOR_GRAY2RGBA)
         gray1.release()
-
         val viz = gray4.clone()
         gray4.release()
 
-        if (!iconMask.empty()) {
-            // Icon pixels in original colour.
-            screenshot.copyTo(viz, iconMask)
-            // Surround pixels tinted blue so the two regions are distinguishable.
-            val blue = Mat(h, w, viz.type(), Scalar(0.0, 0.0, 255.0, 255.0))
-            blue.copyTo(viz, surroundMask)
-            blue.release()
-
+        if (scaledW > 0) {
             val x = (ICON_LEFT_NX * w).toInt()
             val y = (ICON_TOP_NY  * h).toInt()
-            val r = ((ICON_LEFT_NX + ICON_NW) * w).toInt()
-            val b = ((ICON_TOP_NY  + ICON_NH) * h).toInt()
-            val color = if (result != null)
-                Scalar(255.0, 255.0, 0.0, 255.0)   // yellow — found
-            else
-                Scalar(255.0, 0.0, 0.0, 255.0)     // red — not found
-            Imgproc.rectangle(viz, Point(x.toDouble(), y.toDouble()),
-                Point(r.toDouble(), b.toDouble()), color, 3)
+
+            // Screenshot edges in cyan within the icon region.
+            Imgproc.cvtColor(screenshot, grayFrame, Imgproc.COLOR_RGBA2GRAY)
+            val roi = grayFrame.submat(y, minOf(h, y + scaledH), x, minOf(w, x + scaledW))
+            Imgproc.Canny(roi, roiEdges, CANNY_LOW.toDouble(), CANNY_HIGH.toDouble())
+
+            val vizRoi = viz.submat(y, minOf(h, y + scaledH), x, minOf(w, x + scaledW))
+            val cyan   = Mat(vizRoi.size(), vizRoi.type(), Scalar(  0.0, 255.0, 255.0, 255.0))
+            val yellow = Mat(vizRoi.size(), vizRoi.type(), Scalar(255.0, 255.0,   0.0, 255.0))
+            // Cyan where screenshot edges fall; yellow where template edges fall (overwrites cyan).
+            cyan.copyTo(vizRoi, roiEdges)
+            yellow.copyTo(vizRoi, scaledEdges)
+            cyan.release()
+            yellow.release()
+            vizRoi.release()
+
+            val boxColor = if (result != null)
+                Scalar(255.0, 255.0, 0.0, 255.0) else Scalar(255.0, 0.0, 0.0, 255.0)
+            Imgproc.rectangle(viz,
+                Point(x.toDouble(), y.toDouble()),
+                Point((x + scaledW).toDouble(), (y + scaledH).toDouble()),
+                boxColor, 3)
         }
 
-        val text = "icon=%.1f%%  surround=%.1f%%"
-            .format(lastIconRatio * 100f, lastSurroundRatio * 100f)
+        val text = "score=%.3f".format(lastScore)
         val fontFace  = Imgproc.FONT_HERSHEY_SIMPLEX
         val fontScale = 1.2
         val fontThick = 2
         val baseLine  = IntArray(1)
         val textSize  = Imgproc.getTextSize(text, fontFace, fontScale, fontThick, baseLine)
-        val pad    = 12
-        val textX  = pad
-        val textY  = h - pad - baseLine[0]
-        val boxTop = h - textSize.height.toInt() - baseLine[0] - pad * 2
+        val pad       = 12
+        val textY     = h - pad - baseLine[0]
+        val boxTop    = h - textSize.height.toInt() - baseLine[0] - pad * 2
         Imgproc.rectangle(viz,
             Point(0.0, boxTop.toDouble()),
             Point((textSize.width + pad * 2).toDouble(), h.toDouble()),
             Scalar(0.0, 0.0, 0.0, 200.0), -1)
         Imgproc.putText(viz, text,
-            Point(textX.toDouble(), textY.toDouble()),
+            Point(pad.toDouble(), textY.toDouble()),
             fontFace, fontScale, Scalar(255.0, 255.0, 255.0, 255.0), fontThick)
 
         val bitmap = Bitmap.createBitmap(viz.cols(), viz.rows(), Bitmap.Config.ARGB_8888)
@@ -222,12 +197,11 @@ class EscapeButtonDetector(context: Context) {
 
     /** Release all pre-allocated Mats.  Call when the detector is no longer needed. */
     fun release() {
-        iconAlpha.release()
-        iconMask.release()
-        surroundMask.release()
-        hsv.release()
-        colorMask.release()
-        masked.release()
+        templateEdges.release()
+        scaledEdges.release()
+        grayFrame.release()
+        roiEdges.release()
+        matchResult.release()
     }
 
     companion object {
@@ -237,16 +211,20 @@ class EscapeButtonDetector(context: Context) {
         // Region: x=65, y=117, size=92×86.
         private const val ICON_LEFT_NX   =  65f / 1080f  // 0.0602
         private const val ICON_TOP_NY    = 117f / 2400f  // 0.0488
-        private const val ICON_NW        =  92f / 1080f  // 0.0852  (width  fraction of screen width)
-        private const val ICON_NH        =  86f / 2400f  // 0.0358  (height fraction of screen height)
+        private const val ICON_NW        =  92f / 1080f  // 0.0852
+        private const val ICON_NH        =  86f / 2400f  // 0.0358
         private const val ICON_CENTER_NX = (65f + 46f) / 1080f  // 0.1028
         private const val ICON_CENTER_NY = (117f + 43f) / 2400f // 0.0667
 
-        // Minimum fraction of icon-mask pixels that must be white (the running figure).
-        private const val ICON_THRESHOLD  = 0.40f
-        // Maximum fraction of surround-mask pixels that may be white (the background).
-        // Plain white background gives ~100%; encounter screen gives ~0% (blue-grey).
-        // Calibrate from debug output; start permissive.
-        private const val SURROUND_MAX    = 0.30f
+        // Canny edge detection thresholds.  Applied to both template and screenshot ROI.
+        private const val CANNY_LOW  = 50
+        private const val CANNY_HIGH = 150
+
+        // Half-width of the matchTemplate search window around the expected position.
+        private const val SEARCH_PAD = 6
+
+        // Minimum TM_CCOEFF_NORMED score to report the button present.
+        // Range is [-1, 1]; a uniform/white region scores near 0.  Calibrate from debug output.
+        private const val MATCH_THRESHOLD = 0.3f
     }
 }
